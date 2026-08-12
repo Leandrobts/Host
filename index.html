@@ -322,7 +322,7 @@ async function crashTolerantScan(p, anchor, label = 'WebKit') {
   const anchorN  = i64n(anchor);
   const anchorS  = anchor.toString();
   const key      = crashKey(anchorS);
-  const MAX_OFF  = 60 * 1024 * 1024; // 40 MB — cobre ctor_rva até ~60 MB
+  const MAX_OFF  = 44 * 1024 * 1024; // 40 MB — cobre ctor_rva até ~60 MB
   const YIELD_AT = 512 * PAGE;       // yield a cada 2 MB
 
   log('[*] Scan crash-tolerant de 0x' + anchor.toString()
