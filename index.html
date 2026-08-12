@@ -111,7 +111,7 @@
 
 <div id="console"></div>
 
-<!-- Carrega o arquivo de offsets do firmware -->
+<!-- Carrega o arquivo de offsets do firmware 13.52 na raiz -->
 <script src="./13.52.js?v=1"></script>
 
 <script type="module">
@@ -121,10 +121,23 @@ import { installWindowP } from './resources/mem.js';
 
 globalThis.int64 = int64;
 
+const $console    = document.getElementById('console');
 const $dot        = document.getElementById('status-dot');
 const $statusText = document.getElementById('status-text');
 const $attemptTxt = document.getElementById('attempt-text');
 const $stageTxt   = document.getElementById('stage-text');
+
+// Função global disponibilizada para que o main.js consiga renderizar os logs na TV
+window.log = function(string, level = 1) {
+    if (!$console) return;
+    const elemClass = ["LOG-DEBUG", "LOG-INFO", "LOG-LOG", "LOG-WARN", "LOG-ERROR", "LOG-SUCCESS"][level & 0xF] || "LOG-INFO";
+    
+    let logElem = document.createElement("div");
+    logElem.innerText = string;
+    logElem.className = elemClass;
+    $console.appendChild(logElem);
+    $console.scrollTop = $console.scrollHeight;
+};
 
 function setStatus(msg, state = 'running') {
     $statusText.textContent = msg;
@@ -161,9 +174,9 @@ function onCoreEvent(tag, detail, attempt) {
         return;
     }
 
-    setStatus('Primitiva pronta — Carregando main.js', 'ok');
+    setStatus('Primitiva pronta — Executando main.js', 'ok');
 
-    // Carrega o main.js que agora exibirá a base calculada na tela
+    // Carrega o main.js original com a função log global já ativa
     let mainScript = document.createElement('script');
     mainScript.src = './main.js?v=1';
     document.body.appendChild(mainScript);
