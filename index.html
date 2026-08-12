@@ -211,12 +211,14 @@
      ES MODULE ENTRY POINT
      Garante o carregamento exato da mesma instância via ?v=10
      ============================================================ -->
+<script src="./13.52.js?v=1"></script>
 <script type="module">
 
 // --- imports dos módulos do slopkit ------------------------------------------
 import { int64 } from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
 import { installWindowP } from './resources/mem.js';
+    
 
 // int64 precisa estar global pois mem.js e main.js a referenciam via globalThis
 globalThis.int64 = int64;
