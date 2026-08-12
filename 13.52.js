@@ -1,10 +1,15 @@
-// 13.52 -- generated from libSceNKWebKit / libkernel_web /
-// libSceLibcInternal. file offset = rva + 0x4000
 
-// host-constructor candidates: webkitBase = nativeCtorAddr - hc
-const OFFSET_wk_host_constructor_candidates = [0x00015060, 0x00015120, 0x000151C0, 0x000152C0, 0x000153E0];
-// Exact WKDownloadGetTypeID export (NID -x5vK4NNNYM).
+// PS4 13.52 — slopkit method
+// webkitBase = __ps5NativeCtor - OFFSET_wk_host_constructor_candidates
 
-const OFFSET_lk_getpid                         = 0x00010E4D;
+const OFFSET_wk_host_constructor_candidates = [0x36F9E20];
 
-const OFFSET_lc_memset                         = 0x000D3439;
+// Preencher os demais quando tiver o dump:
+const OFFSET_wk_memset_import = 0x0;         // TODO
+const OFFSET_wk___stack_chk_guard_import = 0x0; // TODO
+const OFFSET_lc_memset = 0x0;                // TODO
+const OFFSET_lk___stack_chk_guard = 0x0;     // TODO
+const OFFSET_lk_getpid = 0x00010E4D;         // já tinha
+
+let wk_gadgetmap = {};
+let syscall_map = {};
