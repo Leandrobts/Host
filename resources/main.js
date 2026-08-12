@@ -134,18 +134,7 @@ function jbmark(tag, detail) {
 }
 
 async function prepare(p) {
-// --- ADIÇÃO PARA EXIBIR A BASE CALCULADA VIA OFFSET 13.52 ---
-    try {
-        const ctor = globalThis.__ps5NativeCtor;
-        if (typeof ctor === 'number' && ctor > 0x100000000) {
-            const hc = OFFSET_wk_host_constructor_candidates[0]; // Pega o 0x36F9E20 do 13.52.js
-            const resolvedBase = ctor - hc;
-            log("[+] __ps5NativeCtor vazado: 0x" + ctor.toString(16), LogLevel.SUCCESS);
-            log("[+] WebKit Base calculada: 0x" + resolvedBase.toString(16), LogLevel.SUCCESS);
-        }
-    } catch(e) {
-        log("[-] Erro ao calcular base no main.js: " + e.message, LogLevel.ERROR);
-    }
+
     let textArea = document.createElement("textarea");
 
     let textAreaVtPtr = p.read8(p.leakval(textArea).add32(0x18));
