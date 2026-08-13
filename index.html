@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Advanced Resolver)</title>
+<title>PS4 WebKit Exploit (13.52 - Auto Offset Extractor)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -24,7 +24,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
 /* console */
-#con{width:100%;max-width:720px;height:300px;background:#050508;
+#con{width:100%;max-width:720px;height:320px;background:#050508;
   border:1px solid #161825;border-radius:6px;overflow-y:auto;
   padding:8px 10px;font-size:11px;line-height:1.65;margin-bottom:8px}
 .i{color:#5b9bd5}.ok{color:#00c853;font-weight:bold}.w{color:#f0a500}
@@ -43,7 +43,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 /* constants output box */
 #cbox{width:100%;max-width:720px;background:#03100a;border:2px solid #00c853;
   border-radius:6px;padding:12px;display:none;margin-bottom:8px;
-  font-size:12px;line-height:1.8;color:#4ade80}
+  font-size:11px;line-height:1.6;color:#4ade80;white-space:pre-wrap;word-break:break-all}
 #cbox .ct{color:#fff;font-weight:bold;margin-bottom:6px;
   border-bottom:1px solid #0a2a15;padding-bottom:4px}
 </style>
@@ -74,7 +74,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ PS4 FW 13.52 — Advanced Resolver ═══</div>
+  <div class="ct">// ═══ GERAÇÃO AUTOMÁTICA PARA O 13.52.js ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -108,11 +108,13 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Resolução avançada com GOT + Fallback de varredura por proximidade
-function resolveLibrariesAdvanced(p, webkitBase) {
-  logH('RESOLVENDO BIBLIOTECAS (AVANÇADO)');
-  let libKernelBase = null;
-  let libcBase = null;
+// Extrator automático de stubs via GOT
+function extractImportOffsets(p, webkitBase) {
+  logH('EXTRATOR AUTOMÁTICO DE IMPORTS (GOT)');
+  let foundMemsetImport = 0;
+  let foundStackImport = 0;
+  let libcBaseFound = null;
+  let lkBaseFound = null;
 
   try {
     let gotAddress = null;
@@ -127,45 +129,37 @@ function resolveLibrariesAdvanced(p, webkitBase) {
       } catch (e) {}
     }
 
-    if (gotAddress) {
-      log('[+] Analisando GOT (0 a 150 slots)...', 'i');
-      for (let s = 0; s < 150; s++) {
-        try {
-          const ptrVal = p.read8(gotAddress.add32(s * 8));
-          const hi = ptrVal.hi;
-          const alignedLow = ptrVal.low & ~0x3FFF;
-
-          if (hi === 0x80 && !libKernelBase) {
-            libKernelBase = new int64(alignedLow, hi);
-            log(`[+] libkernel Base (GOT[${s}]): 0x${libKernelBase.toString()}`, 'ok');
-          } else if (hi >= 0x90 && hi <= 0x98 && !libcBase) {
-            libcBase = new int64(alignedLow, hi);
-            log(`[+] libc Base (GOT[${s}]): 0x${libcBase.toString()}`, 'ok');
-          }
-        } catch (e) {}
-        if (libKernelBase && libcBase) break;
-      }
+    if (!gotAddress) {
+      log('[-] GOT não localizada para extração.', 'w');
+      return;
     }
 
-    // Fallback inteligente: se a libkernel não veio pela GOT, varre a faixa esperada na memória
-    if (!libKernelBase) {
-      log('[*] Executando fallback de varredura para libkernel...', 'w');
-      for (let testHigh = 0x800000000; testHigh < 0x850000000; testHigh += 0x100000) {
-        try {
-          const m = p.read4(testHigh);
-          if (m === 0x464C457F) { // Assinatura ELF
-            libKernelBase = new int64(testHigh % 0x100000000, Math.floor(testHigh / 0x100000000));
-            log(`[+] libkernel Base (Fallback): 0x${libKernelBase.toString()}`, 'ok');
-            break;
-          }
-        } catch(e) {}
-      }
+    log('[+] Analisando slots da GOT em busca de stubs...', 'i');
+    for (let s = 0; s < 200; s++) {
+      try {
+        const slotAddr = gotAddress.add32(s * 8);
+        const ptrVal = p.read8(slotAddr);
+        const hi = ptrVal.hi;
+        const alignedLow = ptrVal.low & ~0x3FFF;
+
+        // Identifica libkernel (0x80xxxxxxx) ou libc (0x90xxxxxxx)
+        if (hi === 0x80 && !lkBaseFound) {
+          lkBaseFound = new int64(alignedLow, hi);
+          foundStackImport = slotAddr.sub32(webkitBase.low).low; // Offset RVA no WebKit
+          log(`[+] __stack_chk_guard_import encontrado em: 0x${foundStackImport.toString(16)}`, 'ok');
+        } else if (hi >= 0x90 && hi <= 0x98 && !libcBaseFound) {
+          libcBaseFound = new int64(alignedLow, hi);
+          foundMemsetImport = slotAddr.sub32(webkitBase.low).low; // Offset RVA no WebKit
+          log(`[+] memset_import encontrado em: 0x${foundMemsetImport.toString(16)}`, 'ok');
+        }
+      } catch (e) {}
     }
+
+    return { foundMemsetImport, foundStackImport, libcBaseFound, lkBaseFound };
   } catch (err) {
-    log('[-] Erro no resolvedor avançado: ' + err.message, 'e');
+    log('[-] Erro na extração: ' + err.message, 'e');
+    return null;
   }
-
-  return { libKernelBase, libcBase };
 }
 
 async function main() {
@@ -212,8 +206,8 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Resolvendo bases e bibliotecas...', 'r');
-  logH('RESOLUÇÃO DE BASES (13.52)');
+  setStatus('Extraindo offsets dinâmicos...', 'r');
+  logH('EXTRAÇÃO DE OFFSETS (13.52)');
 
   const ctor = globalThis.__ps5NativeCtor;
   if (typeof ctor === 'number' && ctor > 0x100000000) {
@@ -236,21 +230,26 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    const { libKernelBase, libcBase } = resolveLibrariesAdvanced(p, webkitBase);
+    const extracted = extractImportOffsets(p, webkitBase);
 
-    if (libKernelBase) setCard('c-lk', '0x' + libKernelBase.toString());
-    if (libcBase) setCard('c-lc', '0x' + libcBase.toString());
+    if (extracted && extracted.lkBaseFound) setCard('c-lk', '0x' + extracted.lkBaseFound.toString());
+    if (extracted && extracted.libcBaseFound) setCard('c-lc', '0x' + extracted.libcBaseFound.toString());
 
-    setStatus('Bases resolvidas com sucesso!', 'ok');
-    log('✔ Módulos e dependências processados com sucesso.', 'ok');
+    setStatus('Extração concluída com sucesso!', 'ok');
+    log('✔ Offsets de importação gerados na caixa abaixo.', 'ok');
 
     const cbox = document.getElementById('cbox');
     cbox.style.display = 'block';
-    document.getElementById('c-out').innerHTML =
-      `__ps5NativeCtor = 0x${ctorInt64.toString()}<br>` +
-      `WebKit Base    = 0x${webkitBase.toString()}<br>` +
-      `libkernel Base = ${libKernelBase ? '0x' + libKernelBase.toString() : 'Não isolado'}<br>` +
-      `libSceLibc Base = ${libcBase ? '0x' + libcBase.toString() : 'Não isolado'}`;
+    
+    let generatedText = 
+      `const OFFSET_wk_memset_import = 0x${extracted && extracted.foundMemsetImport ? extracted.foundMemsetImport.toString(16) : '0'};\n` +
+      `const OFFSET_wk___stack_chk_guard_import = 0x${extracted && extracted.foundStackImport ? extracted.foundStackImport.toString(16) : '0'};\n` +
+      `// Bases detectadas em runtime:\n` +
+      `// WebKit: 0x${webkitBase.toString()}\n` +
+      `// Libc: ${extracted && extracted.libcBaseFound ? '0x' + extracted.libcBaseFound.toString() : 'N/A'}\n` +
+      `// Libkernel: ${extracted && extracted.lkBaseFound ? '0x' + extracted.lkBaseFound.toString() : 'N/A'}`;
+
+    document.getElementById('c-out').textContent = generatedText;
 
   } else {
     log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
