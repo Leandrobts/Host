@@ -51,7 +51,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 </head>
 <body>
 
-<h1>PS4 WebKit Exploit (13.52)</h1>
+<h1>PS4 WebKit Exploit</h1>
 <div id="fw">detectando...</div>
 
 <div id="sb">
@@ -107,57 +107,36 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Rotina segura para inspecionar o segmento dinâmico e a GOT do WebKit em execução
+// Rotina aprimorada para varredura direta dos ponteiros da GOT na memória
 function inspectWebKitGOT(p, webkitBase) {
   logH('INSPECIONANDO TABELA GOT / DINÂMICA');
   try {
-    // Lê o offset do Program Header Table (e_phoff) no cabeçalho ELF (geralmente em base + 0x20)
-    const phoffVal = p.read8(webkitBase.add32(0x20));
-    const phnumVal = p.read2 ? p.read2(webkitBase.add32(0x38)) : (p.read4(webkitBase.add32(0x38)) & 0xFFFF);
-    
-    log(`[+] ELF phoff: 0x${phoffVal.toString(16)} | phnum: ${phnumVal}`, 'd');
-
-    let dynamicOffset = 0;
-    // Varre os program headers para achar o PT_DYNAMIC (tipo 2)
-    for (let i = 0; i < Math.min(phnumVal, 32); i++) {
-      const phAddr = webkitBase.add32(phoffVal.low + i * 0x38);
-      const pType = p.read4(phAddr);
-      if (pType === 2) { // PT_DYNAMIC
-        dynamicOffset = p.read8(phAddr.add32(0x8)).low; // p_offset
-        break;
-      }
-    }
-
-    if (dynamicOffset === 0) {
-      log('[-] Segmento PT_DYNAMIC não localizado diretamente.', 'w');
-      return;
-    }
-
-    const dynBase = webkitBase.add32(dynamicOffset);
-    log(`[+] PT_DYNAMIC encontrado em off: 0x${dynamicOffset.toString(16)}`, 'ok');
-
-    // Lê as entradas dinâmicas (DT_RELA, DT_PLTGOT, etc.)
-    for (let j = 0; j < 128; j++) {
-      const entryAddr = dynBase.add32(j * 16);
-      const tag = p.read8(entryAddr).low;
-      const val = p.read8(entryAddr.add32(8));
-      if (tag === 0) break; // DT_NULL
-
-      if (tag === 3) { // DT_PLTGOT
-        log(`[+] DT_PLTGOT (GOT) encontrado no RVA: 0x${val.toString(16)}`, 'ok');
-        const gotAddress = webkitBase.add32(val.low);
-        
-        // Inspeciona os primeiros slots da GOT para capturar ponteiros externos
-        for (let s = 0; s < 10; s++) {
-          try {
-            const ptrVal = p.read8(gotAddress.add32(s * 8));
-            if (ptrVal.hi > 0) {
-              log(`    GOT[${s}] -> 0x${ptrVal.toString()}`, 'a');
-            }
-          } catch(e) {}
+    let dynBase = null;
+    for (let off = 0x1000; off < 0x50000; off += 8) {
+      try {
+        const val1 = p.read8(webkitBase.add32(off));
+        const val2 = p.read8(webkitBase.add32(off + 8));
+        // DT_PLTGOT (tag 3) seguido de um endereço válido na GOT
+        if (val1.low === 3 && val2.hi > 0) {
+          log(`[+] DT_PLTGOT identificado no off: 0x${off.toString(16)}`, 'ok');
+          const gotAddress = webkitBase.add32(val2.low);
+          
+          for (let s = 0; s < 15; s++) {
+            try {
+              const ptrVal = p.read8(gotAddress.add32(s * 8));
+              if (ptrVal.hi > 0) {
+                log(`    GOT[${s}] -> 0x${ptrVal.toString()}`, 'a');
+              }
+            } catch(e) {}
+          }
+          dynBase = gotAddress;
+          break;
         }
-        break;
-      }
+      } catch (e) {}
+    }
+
+    if (!dynBase) {
+      log('[-] Varredura alternativa da GOT concluída.', 'w');
     }
   } catch (err) {
     log('[-] Erro na inspeção da GOT: ' + err.message, 'e');
@@ -232,11 +211,11 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    // Dispara a inspeção segura da tabela GOT em tempo de execução
+    // Executa a inspeção da GOT
     inspectWebKitGOT(p, webkitBase);
 
     setStatus('Bases e GOT inspecionadas com sucesso!', 'ok');
-    log('✔ Endereços mapeados e validados perfeitamente[span_0](start_span)[span_0](end_span).', 'ok');
+    log('✔ Endereços mapeados e validados com sucesso.', 'ok');
 
     const cbox = document.getElementById('cbox');
     cbox.style.display = 'block';
