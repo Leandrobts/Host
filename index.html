@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Notification PoC)</title>
+<title>PS4 WebKit Exploit (13.52 - Stable PoC)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -69,12 +69,12 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
   <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
   <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
-  <div class="card"><div class="cl">Status Notificação</div><div class="cv na" id="c-g">Aguardando</div></div>
+  <div class="card"><div class="cl">Status R/W</div><div class="cv na" id="c-g">Aguardando</div></div>
 </div>
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ STATUS DA NOTIFICAÇÃO (13.52) ═══</div>
+  <div class="ct">// ═══ STATUS DO AMBIENTE (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -83,8 +83,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 <script type="module">
 import { int64 }              from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
-import { installWindowP }     from './mem.js';[cite: 1]
-import { initRop, sendNotification } from './rop.js';
+import { installWindowP }     from './mem.js';[span_0](start_span)[span_0](end_span)
 globalThis.int64 = int64;
 
 const $con = document.getElementById('con');
@@ -169,7 +168,7 @@ async function main() {
 
   let p;
   try {
-    p = installWindowP(carrier, {[cite: 1]
+    p = installWindowP(carrier, {[span_1](start_span)[span_1](end_span)
       promote: true,
       onEvent: (tag, detail) => {
         log(`  [mem/${tag}] ${detail}`, 'd');
@@ -182,7 +181,7 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Mapeando bases...', 'r');
+  setStatus('Mapeando bases do sistema...', 'r');
   logH('MAPEAMENTO DA 13.52');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -208,26 +207,18 @@ async function main() {
       
       if (bases.libKernelBase) setCard('c-lk', '0x' + bases.libKernelBase.toString());
       if (bases.libcBase) setCard('c-lc', '0x' + bases.libcBase.toString());
+      setCard('c-g', 'Pronto');
 
-      initRop(webkitBase, bases.libKernelBase, bases.libcBase);
-      
-      try {
-        const notif = sendNotification("Hello World from PS4 FW 13.52!");
-        setCard('c-g', 'Pronto');
-        setStatus('Notificação configurada com sucesso!', 'ok');
-        log('✔ Buffer de notificação alocado e pronto para disparo.', 'ok');
+      setStatus('Ambiente pronto e estável!', 'ok');
+      log('✔ Primitiva R/W e bases isoladas com sucesso.', 'ok');
 
-        const cbox = document.getElementById('cbox');
-        cbox.style.display = 'block';
-        document.getElementById('c-out').textContent =
-          `WebKit Base    = 0x${webkitBase.toString()}\n` +
-          `libkernel Base = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'N/A'}\n` +
-          `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n` +
-          `Buffer Notif   = 0x${notif.requestBuffer.toString()}\n` +
-          `Função Target  = 0x${notif.notifyFunc.toString()}`;
-      } catch (err) {
-        log('[-] Erro ao preparar notificação: ' + err.message, 'e');
-      }
+      const cbox = document.getElementById('cbox');
+      cbox.style.display = 'block';
+      document.getElementById('c-out').textContent =
+        `WebKit Base     = 0x${webkitBase.toString()}\n` +
+        `libkernel Base  = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'N/A'}\n` +
+        `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n\n` +
+        `// Pronto para alocação de buffer e notificação.`;
     }, 1000);
 
   } else {
