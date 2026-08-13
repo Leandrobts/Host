@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52)</title>
+<title>PS4 WebKit Exploit (13.52 Runtime Scanner)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -50,7 +50,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 </head>
 <body>
 
-<h1>PS4 WebKit Exploit</h1>
+<h1>PS4 WebKit Exploit (13.52)</h1>
 <div id="fw">detectando...</div>
 
 <div id="sb">
@@ -72,10 +72,11 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ PS4 FW 13.52 — Resolução Concluída ═══</div>
+  <div class="ct">// ═══ PS4 FW 13.52 — Scanner Concluído ═══</div>
   <div id="c-out"></div>
 </div>
 
+<!-- Carrega o arquivo de configuração da raiz -->
 <script src="./13.52.js?v=1"></script>
 
 <script type="module">
@@ -153,7 +154,6 @@ async function main() {
   setStatus('Resolvendo bases e NativeCtor...', 'r');
   logH('RESOLUÇÃO DA BASE DO WEBKIT (13.52)');
 
-  // Pega o __ps5NativeCtor exposto pelo core.js
   const ctor = globalThis.__ps5NativeCtor;
   if (typeof ctor === 'number' && ctor > 0x100000000) {
     const hi = Math.floor(ctor / 0x100000000);
@@ -163,7 +163,6 @@ async function main() {
     log('[+] __ps5NativeCtor vazado: 0x' + ctorInt64.toString(), 'a');
     setCard('c-ct', '0x' + ctorInt64.toString());
 
-    // Pega o offset confirmado do 13.52.js
     const hc = (typeof OFFSET_wk_host_constructor_candidates !== 'undefined') 
                ? OFFSET_wk_host_constructor_candidates[0] 
                : 0x36F9E20;
@@ -176,21 +175,25 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    setStatus('Bases resolvidas com sucesso!', 'ok');
-    log('✔ Endereços mapeados e validados perfeitamente.', 'ok');
+    // Disponibiliza a base globalmente para o scanner consumir
+    window.wkBase = Number(resolvedBaseVal);
 
-    // Mostra caixa de sucesso com as constantes
-    const cbox = document.getElementById('cbox');
-    cbox.style.display = 'block';
-    document.getElementById('c-out').innerHTML =
-      `__ps5NativeCtor = 0x${ctorInt64.toString()}<br>` +
-      `WebKit Base    = 0x${webkitBase.toString()}<br>` +
-      `Offset Aplicado = 0x${hc.toString(16).toUpperCase()}`;
+    setStatus('Primitiva pronta — Executando Runtime Scanner...', 'ok');
+    logH('INICIALIZANDO RUNTIME SCANNER');
 
-    // Dispara o main.js original para continuar o fluxo de payloads/rop se necessário
-    let mainScript = document.createElement('script');
-    mainScript.src = './main.js?v=1';
-    document.body.appendChild(mainScript);
+    // Carrega o ps4_runtime_scanner.js da raiz logo após as primitivas estarem prontas
+    let scannerScript = document.createElement('script');
+    scannerScript.src = './ps4_runtime_scanner.js?v=1';
+    scannerScript.onload = () => {
+      log('[+] ps4_runtime_scanner.js executado com sucesso!', 'ok');
+      const cbox = document.getElementById('cbox');
+      cbox.style.display = 'block';
+      document.getElementById('c-out').innerHTML =
+        `__ps5NativeCtor = 0x${ctorInt64.toString()}<br>` +
+        `WebKit Base    = 0x${webkitBase.toString()}<br>` +
+        `Status         = Verifique o console (F12 / logs)`;
+    };
+    document.body.appendChild(scannerScript);
 
   } else {
     log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
