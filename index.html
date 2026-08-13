@@ -108,7 +108,7 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// Rotina avançada para resolver bases vizinhas através da GOT
+// Rotina avançada com range estendido (120 slots) para isolar libkernel e libc via GOT
 function resolveLibrariesViaGOT(p, webkitBase) {
   logH('RESOLVENDO BIBLIOTECAS VIA GOT');
   let libKernelBase = null;
@@ -132,12 +132,11 @@ function resolveLibrariesViaGOT(p, webkitBase) {
       return { libKernelBase: null, libcBase: null };
     }
 
-    log('[+] Analisando slots da GOT em busca de referências...', 'i');
-    for (let s = 0; s < 60; s++) {
+    log('[+] Analisando slots da GOT (0 a 120) em busca de referências...', 'i');
+    for (let s = 0; s < 120; s++) {
       try {
         const ptrVal = p.read8(gotAddress.add32(s * 8));
         const hi = ptrVal.hi;
-        // Alinhamento de página de 16KB comum em binários do PS4 (0x4000)
         const alignedLow = ptrVal.low & ~0x3FFF;
 
         if (hi === 0x80 && !libKernelBase) {
@@ -225,7 +224,6 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    // Executa a resolução automática das outras bibliotecas via GOT
     const { libKernelBase, libcBase } = resolveLibrariesViaGOT(p, webkitBase);
 
     if (libKernelBase) setCard('c-lk', '0x' + libKernelBase.toString());
