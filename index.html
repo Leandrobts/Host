@@ -20,7 +20,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 #dot.e{background:#ff4444}
 @keyframes p{0%,100%{opacity:1}50%{opacity:.2}}
 #st{font-size:12px;color:#bbb;flex:1}
-#bars{width:100%^^max-width:720px;display:flex;justify-content:space-between;
+#bars{width:100%;max-width:720px;display:flex;justify-content:space-between;
   font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
 /* console */
@@ -83,7 +83,7 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 <script type="module">
 import { int64 }              from './resources/int64.js';
 import { establishPrimitive } from './resources/core.js?v=10';
-import { installWindowP }     from './mem.js'; /*[span_7](start_span)[span_7](end_span) */
+import { installWindowP }     from './mem.js';[span_0](start_span)[span_0](end_span)
 import { initRop, sendNotification } from './rop.js';
 globalThis.int64 = int64;
 
@@ -169,7 +169,7 @@ async function main() {
 
   let p;
   try {
-    p = installWindowP(carrier, { /*[span_8](start_span)[span_8](end_span) */
+    p = installWindowP(carrier, {[span_1](start_span)[span_1](end_span)
       promote: true,
       onEvent: (tag, detail) => {
         log(`  [mem/${tag}] ${detail}`, 'd');
@@ -209,7 +209,6 @@ async function main() {
       if (bases.libKernelBase) setCard('c-lk', '0x' + bases.libKernelBase.toString());
       if (bases.libcBase) setCard('c-lc', '0x' + bases.libcBase.toString());
 
-      // Inicializa o ROP e prepara a notificação
       initRop(webkitBase, bases.libKernelBase, bases.libcBase);
       
       try {
